@@ -11,6 +11,7 @@ const API = {
   cities: 'https://unpkg.com/globe.gl/example/datasets/ne_110m_populated_places_simple.geojson',
   volcanoes: 'https://unpkg.com/globe.gl/example/datasets/world_volcanoes.json',
   restcountriesUrls: [
+    'https://raw.githubusercontent.com/mledoze/countries/master/countries.json',
     'https://restcountries.com/v3.1/all?fields=name,cca3,population,area,region,capital,latlng,landlocked',
     'https://restcountries.com/v3.1/all'
   ],
@@ -19,6 +20,13 @@ const API = {
     pop: 'https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=20000&date=2023:2026'
   },
   opensky: 'https://opensky-network.org/api/states/all',
+  adsb: [
+    'https://api.adsb.lol/v2/point/50/8/1000',
+    'https://api.adsb.lol/v2/point/45/-40/1300',
+    'https://api.adsb.lol/v2/point/39/-98/1100',
+    'https://api.adsb.lol/v2/point/30/125/1100',
+    'https://api.adsb.lol/v2/point/24/55/800'
+  ],
   ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,101,4,104&bbox=29,31,31,33&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,52,2&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55.5,27,57.5&bbox=10,110,14,113&bbox=53,2,56,6&bbox=32,-80,36,-74',
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
@@ -389,3 +397,55 @@ const SHIPS = [
   { name: 'Vraquier — Japon (minerai)', lat: 34.7, lng: 136.9, type: 'Vraquier', metric: '≈ 205 000 tpl' },
   { name: 'Cargo — Floride', lat: 28.5, lng: -81.3, type: 'Cargo', metric: '≈ 48 000 tpl' }
 ];
+
+const AIRLINES = {
+  AAL: ['American Airlines', 'États-Unis'], UAL: ['United Airlines', 'États-Unis'], DAL: ['Delta Air Lines', 'États-Unis'],
+  SWA: ['Southwest Airlines', 'États-Unis'], JBU: ['JetBlue Airways', 'États-Unis'], ASA: ['Alaska Airlines', 'États-Unis'],
+  FFT: ['Frontier Airlines', 'États-Unis'], ACA: ['Air Canada', 'Canada'], WJA: ['WestJet', 'Canada'],
+  AMX: ['Aeroméxico', 'Mexique'], GLO: ['Gol Transportes Aéreos', 'Brésil'], LAT: ['LATAM Airlines', 'Chili'],
+  LAN: ['LATAM Chile', 'Chili'], AVA: ['Avianca', 'Colombie'], CUA: ['Cubana', 'Cuba'],
+  BAW: ['British Airways', 'Royaume-Uni'], VIR: ['Virgin Atlantic', 'Royaume-Uni'], EZY: ['easyJet', 'Royaume-Uni'],
+  RYR: ['Ryanair', 'Irlande'], DLH: ['Lufthansa', 'Allemagne'], AFR: ['Air France', 'France'],
+  KLM: ['KLM Royal Dutch', 'Pays-Bas'], SAS: ['Scandinavian Airlines', 'Suède'], FIN: ['Finnair', 'Finlande'],
+  IBE: ['Iberia', 'Espagne'], TAP: ['TAP Air Portugal', 'Portugal'], AUA: ['Austrian Airlines', 'Autriche'],
+  SWR: ['Swiss International', 'Suisse'], LOT: ['LOT Polish Airlines', 'Pologne'], AEE: ['Aegean Airlines', 'Grèce'],
+  THY: ['Turkish Airlines', 'Turquie'], UAE: ['Emirates', 'Émirats arabes unis'], QTR: ['Qatar Airways', 'Qatar'],
+  ETD: ['Etihad Airways', 'Émirats arabes unis'], KAC: ['Kuwait Airways', 'Koweït'], MSR: ['EgyptAir', 'Égypte'],
+  RAM: ['Royal Air Maroc', 'Maroc'], TUN: ['Tunisair', 'Tunisie'], SAA: ['South African Airways', 'Afrique du Sud'],
+  KEN: ['Kenya Airways', 'Kenya'], ETH: ['Ethiopian Airlines', 'Éthiopie'], ROY: ['Oman Air', 'Oman'],
+  SIA: ['Singapore Airlines', 'Singapour'], CPA: ['Cathay Pacific', 'Hong Kong'], EVA: ['EVA Air', 'Taïwan'],
+  CAL: ['China Airlines', 'Taïwan'], CCA: ['Air China', 'Chine'], CES: ['China Eastern', 'Chine'],
+  CSH: ['Shanghai Airlines', 'Chine'], CHH: ['Hainan Airlines', 'Chine'], CXA: ['Xiamen Airlines', 'Chine'],
+  ANA: ['All Nippon Airways', 'Japon'], JAL: ['Japan Airlines', 'Japon'], JTA: ['JTA Ryukyu', 'Japon'],
+  KAL: ['Korean Air', 'Corée du Sud'], AAR: ['Asiana Airlines', 'Corée du Sud'],
+  QFA: ['Qantas', 'Australie'], VOZ: ['Virgin Australia', 'Australie'], ANZ: ['Air New Zealand', 'Nouvelle-Zélande'],
+  VNH: ['Vietnam Airlines', 'Vietnam'], HVN: ['VietJet Air', 'Vietnam'], THA: ['Thai Airways', 'Thaïlande'],
+  MAS: ['Malaysia Airlines', 'Malaisie'], GIA: ['Garuda Indonesia', 'Indonésie'], PAL: ['Philippine Airlines', 'Philippines']
+};
+
+const AC_TYPES = {
+  'A318': 'Airbus A318', 'A319': 'Airbus A319', 'A320': 'Airbus A320', 'A321': 'Airbus A321',
+  'A20N': 'Airbus A320neo', 'A21N': 'Airbus A321neo',
+  'BCS1': 'Airbus A220-100', 'BCS3': 'Airbus A220-300',
+  'A332': 'Airbus A330-200', 'A333': 'Airbus A330-300', 'A338': 'Airbus A330-900neo', 'A339': 'Airbus A330-900neo',
+  'A342': 'Airbus A340-200', 'A343': 'Airbus A340-300', 'A345': 'Airbus A340-500', 'A346': 'Airbus A340-600',
+  'A359': 'Airbus A350-900', 'A35K': 'Airbus A350-1000', 'A388': 'Airbus A380-800',
+  'B712': 'Boeing 717', 'B732': 'Boeing 737-200', 'B733': 'Boeing 737-300', 'B734': 'Boeing 737-400',
+  'B735': 'Boeing 737-500', 'B736': 'Boeing 737-600', 'B737': 'Boeing 737-700', 'B738': 'Boeing 737-800',
+  'B739': 'Boeing 737-900', 'B38M': 'Boeing 737 MAX 8', 'B39M': 'Boeing 737 MAX 9', 'B3XM': 'Boeing 737 MAX 10',
+  'B744': 'Boeing 747-400', 'B748': 'Boeing 747-8', 'B741': 'Boeing 747-100', 'B742': 'Boeing 747-200',
+  'B752': 'Boeing 757-200', 'B753': 'Boeing 757-300',
+  'B762': 'Boeing 767-200', 'B763': 'Boeing 767-300', 'B764': 'Boeing 767-400',
+  'B772': 'Boeing 777-200', 'B773': 'Boeing 777-300', 'B77L': 'Boeing 777-200LR', 'B77W': 'Boeing 777-300ER',
+  'B778': 'Boeing 777-8', 'B779': 'Boeing 777-9',
+  'B788': 'Boeing 787-8', 'B789': 'Boeing 787-9', 'B78X': 'Boeing 787-10',
+  'MD11': 'McDonnell Douglas MD-11', 'MD82': 'MD-82', 'MD83': 'MD-83', 'MD88': 'MD-88', 'MD90': 'MD-90',
+  'AT43': 'ATR 42', 'AT45': 'ATR 42-500', 'AT72': 'ATR 72', 'AT76': 'ATR 72-600',
+  'DH8A': 'Dash 8-100', 'DH8B': 'Dash 8-200', 'DH8C': 'Dash 8-300', 'DH8D': 'Dash 8-400',
+  'E135': 'Embraer E135', 'E145': 'Embraer E145', 'E170': 'Embraer E170', 'E175': 'Embraer E175',
+  'E190': 'Embraer E190', 'E195': 'Embraer E195', 'E290': 'Embraer E190-E2', 'E295': 'Embraer E195-E2',
+  'CRJ2': 'Bombardier CRJ-200', 'CRJ7': 'CRJ-700', 'CRJ9': 'CRJ-900', 'CRJX': 'CRJ-1000',
+  'SU95': 'Sukhoi Superjet 100', 'IL76': 'Ilyushin Il-76', 'A124': 'Antonov An-124',
+  'GLF4': 'Gulfstream IV', 'GLF5': 'Gulfstream V', 'GLEX': 'Bombardier Global Express',
+  'FA7X': 'Dassault Falcon 7X', 'F900': 'Dassault Falcon 900', 'E50P': 'Embraer Phenom 300'
+};

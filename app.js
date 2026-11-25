@@ -66,7 +66,7 @@ const LAYER_DEFS = [
   { id: 'shipping', domain: 'Océans & bathymétrie', label: 'Routes maritimes, ports & détroits' },
   { id: 'cables', domain: 'Océans & bathymétrie', label: 'Câbles sous-marins' },
   { id: 'trenches', domain: 'Océans & bathymétrie', label: 'Fosses abyssales' },
-  { id: 'air', domain: 'Flux & transports mondiaux', label: 'Avions en direct (OpenSky)' },
+  { id: 'air', domain: 'Flux & transports mondiaux', label: 'Avions en direct (ADS-B)' },
   { id: 'ships', domain: 'Flux & transports mondiaux', label: 'Navires en direct (AIS)' },
   { id: 'clouds', domain: 'Atmosphère & espace proche', label: 'Nuageuse & halo atmosphérique' },
   { id: 'iss', domain: 'Atmosphère & espace proche', label: 'ISS — suivi live' }
@@ -556,9 +556,9 @@ function describe(d) {
     case 'peak': return { t: d.name, c: 'Sommet', m: 'Altitude : ' + fmt(d.elev) + ' m' };
     case 'trench': return { t: d.name, c: 'Fosse abyssale', m: d.metric };
     case 'fault': return { t: d.name, c: 'Limite de plaque tectonique', m: d.metric || '' };
-    case 'plane': return { t: d.name, c: 'Avion en direct', m: d.metric || '' };
+    case 'plane': { const al = d.airline || (airlineOf(d.name) || {}).name; return { t: d.name, c: '✈ Avion' + (al ? ' · ' + al : ''), m: d.metric || '' }; }
     case 'air': return { t: d.name, c: 'Route aérienne', m: d.metric || 'Ligne long-courrier' };
-    case 'ship': return { t: d.name, c: 'Navire · ' + (d.type || ''), m: d.metric || '' };
+    case 'ship': return { t: d.name, c: 'Navire · ' + (d.type || 'type inconnu'), m: d.metric || '' };
     default: return { t: d.name || d.layer, c: d.layer, m: d.metric || '' };
   }
 }
@@ -646,14 +646,52 @@ function detailBody(d) {
     case 'peak': return row('Altitude', fmt(d.elev) + ' m') + row('Type', 'Grand relief (donnée embarquée)');
     case 'trench': return row('Profondeur', esc(d.metric)) + row('Type', 'Fosse océanique abyssale');
     case 'fault': return row('Longueur / type', esc(d.metric || 'Limite de plaque majeure'));
-    case 'plane': return row('Indicatif', esc(d.name)) + row('Données de vol', esc(d.metric || '—')) + row('Source', DATA.flightsLive ? 'OpenSky Network — live' : 'simulation embarquée (secours)');
+    case 'plane': {
+      const al = airlineOf(d.name) || (d.airline ? { name: d.airline, country: d.acountry || null } : null);
+      let h = row('Indicatif', esc(d.name));
+      if (d.icao) h += row('ICAO 24 bits', esc(d.icao));
+      h += row('Compagnie', esc((al && al.name) || '—'));
+      if (al && al.country) h += row('Pays de la compagnie', esc(al.country));
+      h += row('Type d’appareil', esc(typeDesc(d.atype) || '—'));
+      if (d.reg) h += row('Immatriculation', esc(d.reg));
+      if (d.alt != null) h += row('Altitude', fmt(d.alt) + ' ft · ' + fmt(d.alt * 0.3048) + ' m');
+      if (d.vel != null) h += row('Vitesse sol', fmt(d.vel) + ' km/h (' + fmt(d.vel / 1.852) + ' nœuds)');
+      if (d.hdg != null) h += row('Cap', fmt(d.hdg) + '° (' + compass(d.hdg) + ')');
+      if (d.metric) h += row('Télémesure', esc(d.metric));
+      h += row('Source', DATA.flightsLive ? 'ADS-B live (adsb.lol / OpenSky Network)' : 'simulation embarquée (secours étiqueté)');
+      return h;
+    }
     case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
-    case 'ship': return row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', 'Trafic maritime mondial — positions types embarquées');
+    case 'ship': return row('Nom / MMSI', esc(d.name)) + row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', DATA.vesselsLive ? 'AIS live (Open Waters)' : 'simulation embarquée (secours étiqueté)');
     default: return '';
   }
 }
 
 function planeColor(alt) { return alt == null ? '#e0f2fe' : alt < 6000 ? '#4cc9f0' : alt < 11000 ? '#ffd166' : '#ff8c42'; }
+
+function airlineOf(cs) {
+  const m = /^([A-Z]{3})/.exec((cs || '').trim().toUpperCase());
+  if (!m || !AIRLINES[m[1]]) return null;
+  return { name: AIRLINES[m[1]][0], country: AIRLINES[m[1]][1] };
+}
+
+function typeDesc(code) {
+  if (!code) return null;
+  const c = String(code).trim().toUpperCase();
+  if (!c) return null;
+  if (AC_TYPES[c]) return AC_TYPES[c];
+  if (c.length > 4 && AC_TYPES[c.slice(0, 4)]) return AC_TYPES[c.slice(0, 4)];
+  if (AC_TYPES[c.slice(0, 3)]) return AC_TYPES[c.slice(0, 3)];
+  return 'Type ICAO ' + c;
+}
+
+function planeMetric(p) {
+  const parts = [];
+  if (p.alt != null) parts.push('alt ' + fmt(p.alt) + ' ft (' + fmt(p.alt * 0.3048) + ' m)');
+  if (p.vel != null) parts.push(fmt(p.vel) + ' km/h');
+  if (p.hdg != null) parts.push('cap ' + fmt(p.hdg) + '°');
+  return parts.join(' · ');
+}
 
 function posAlong(points, f) {
   const n = Math.max(1, points.length - 1);
@@ -668,20 +706,35 @@ function posAlong(points, f) {
   return [a[0] + (b[0] - a[0]) * t, lng];
 }
 
+const SIM_CS = ['AFR','BAW','DLH','UAE','SIA','AAL','UAL','DAL','THY','QTR','ANA','JAL','KLM','IBE','SAS','FIN','ETH','ACA','LAT','RYR','EZY','VIR','CPA','KAL','GLO','AMX'];
+const SIM_T = ['A320','B738','A359','B77W','B789','A388','B763','A332','B39M','E195'];
+const SIM_SHIP_TYPES = ['Porte-conteneurs', 'Cargo', 'Pétrolier', 'Vraquier'];
+
 function seedSyntheticFlights() {
-  DATA.flights = AIR_ROUTES.map((r, i) => ({
-    layer: 'plane', lat: r.a[0], lng: r.a[1], name: 'SIM-' + (i + 1),
-    routePts: [r.a, r.b], phase: i / AIR_ROUTES.length, speed: 0.015 + (i % 5) * 0.004,
-    metric: 'simulation embarquée', color: '#e0f2fe'
-  }));
+  DATA.flights = AIR_ROUTES.map((r, i) => {
+    const cs = SIM_CS[i % SIM_CS.length] + (101 + ((i * 53) % 800));
+    const al = airlineOf(cs);
+    const p = {
+      layer: 'plane', lat: r.a[0], lng: r.a[1], name: cs, icao: 'SIM' + (1000 + i),
+      airline: al ? al.name : null, acountry: al ? al.country : null, atype: SIM_T[i % SIM_T.length],
+      alt: 9200 + (i % 7) * 800, vel: 830 + (i % 5) * 35, hdg: (i * 37) % 360,
+      routePts: [r.a, r.b], phase: i / AIR_ROUTES.length, speed: 0.015 + (i % 5) * 0.004,
+      color: '#e0f2fe'
+    };
+    p.metric = planeMetric(p) + ' · simulation embarquée';
+    return p;
+  });
 }
 
 function seedSyntheticShips() {
-  DATA.vessels = ROUTES.map((r, i) => ({
-    layer: 'ship', lat: r.points[0][0], lng: r.points[0][1], name: 'NAV-' + (i + 1),
-    routePts: r.points, phase: i / ROUTES.length, speed: 0.008 + (i % 4) * 0.003,
-    metric: 'simulation embarquée', color: '#4cc9f0'
-  }));
+  DATA.vessels = ROUTES.map((r, i) => {
+    const t = SIM_SHIP_TYPES[i % SIM_SHIP_TYPES.length];
+    return {
+      layer: 'ship', lat: r.points[0][0], lng: r.points[0][1], name: 'NAV-' + (i + 1), type: t,
+      routePts: r.points, phase: i / ROUTES.length, speed: 0.008 + (i % 4) * 0.003,
+      metric: 'simulation embarquée', color: SHIP_COLORS[t] || '#4cc9f0'
+    };
+  });
 }
 
 function advanceSynthetic() {
@@ -705,31 +758,84 @@ function advanceSynthetic() {
   }
 }
 
+function planeFromAdsb(a, seen) {
+  const lat = a.lat, lon = a.lon;
+  if (lat == null || lon == null || !isFinite(+lat) || !isFinite(+lon)) return null;
+  const hex = String(a.hex || a.icao || '').toUpperCase();
+  if (hex) { if (seen.has(hex)) return null; seen.add(hex); }
+  const cs = String(a.flight || '').trim();
+  const al = airlineOf(cs);
+  const altFt = a.alt_baro === 'ground' ? 0 : (isFinite(+a.alt_baro) ? +a.alt_baro : null);
+  const p = {
+    layer: 'plane', lat: +lat, lng: +lon, name: cs || hex || 'ADS-B',
+    icao: hex || null, airline: al ? al.name : null, acountry: al ? al.country : null,
+    atype: a.t || null, reg: a.r || null,
+    alt: altFt, vel: isFinite(+a.gs) ? +a.gs * 1.852 : null, hdg: isFinite(+a.track) ? +a.track : null,
+    color: planeColor(altFt != null ? altFt * 0.3048 : null)
+  };
+  p.metric = planeMetric(p);
+  return p;
+}
+
+function planesFromOpenSky(j) {
+  const out = [];
+  for (const s of (j && j.states) || []) {
+    const lon = s[5], lat = s[6], alt = s[7], ground = s[8], vel = s[9], hdg = s[10];
+    if (ground || lat == null || lon == null) continue;
+    const cs = (s[1] || '').trim();
+    const al = airlineOf(cs);
+    const altFt = alt != null ? +alt * 3.28084 : null;
+    const p = {
+      layer: 'plane', lat: +lat, lng: +lon, name: cs || String(s[0]),
+      icao: s[0] ? String(s[0]).toUpperCase() : null,
+      airline: al ? al.name : null, acountry: al ? al.country : (s[2] || null), atype: null,
+      alt: altFt, vel: vel != null ? +vel * 3.6 : null, hdg: hdg != null ? +hdg : null,
+      color: planeColor(alt != null ? +alt : null)
+    };
+    p.metric = planeMetric(p);
+    out.push(p);
+    if (out.length >= 400) break;
+  }
+  return out;
+}
+
 async function loadFlights() {
+  let out = null, src = null;
   try {
-    const j = await fetchJSON(API.opensky, 15000);
-    const out = [];
-    for (const s of (j && j.states) || []) {
-      const lon = s[5], lat = s[6], alt = s[7], ground = s[8], vel = s[9], hdg = s[10];
-      if (ground || lat == null || lon == null) continue;
-      out.push({
-        layer: 'plane', lat: +lat, lng: +lon,
-        name: (s[1] || '').trim() || String(s[0]),
-        metric: 'alt ' + fmt((alt || 0) * 3.28084) + ' ft · ' + fmt((vel || 0) * 3.6) + ' km/h · cap ' + fmt(hdg || 0) + '°',
-        color: planeColor(alt)
-      });
+    const res = await Promise.allSettled((API.adsb || []).map(u => fetchJSON(u, 12000)));
+    const seen = new Set();
+    out = [];
+    for (const r of res) {
+      if (r.status !== 'fulfilled') continue;
+      const j = r.value;
+      const acs = (j && (j.ac || j.aircraft)) || (Array.isArray(j) ? j : []);
+      for (const a of acs) {
+        const p = planeFromAdsb(a, seen);
+        if (p) out.push(p);
+        if (out.length >= 400) break;
+      }
       if (out.length >= 400) break;
     }
-    if (!out.length) throw new Error('flux vide');
+    if (out.length) src = 'adsb.lol (ADS-B)';
+    else out = null;
+  } catch (e) { out = null; }
+  if (!out) {
+    try {
+      const j = await fetchJSON(API.opensky, 12000);
+      const list = planesFromOpenSky(j);
+      if (list.length) { out = list; src = 'OpenSky Network'; }
+    } catch (e) { out = null; }
+  }
+  if (out && out.length) {
     DATA.flights = out;
     DATA.flightsLive = true;
     state.net.opensky = 'live';
-    logLoad('OpenSky — ' + out.length + ' avions en direct', true);
-  } catch (e) {
+    logLoad(src + ' — ' + out.length + ' avions en direct', true);
+  } else {
     DATA.flightsLive = false;
     state.net.opensky = 'cache';
     if (!DATA.flights.length) seedSyntheticFlights();
-    logLoad('OpenSky indisponible — ' + DATA.flights.length + ' avions simulés sur les routes aériennes', false);
+    logLoad('Flux avions indisponible (CORS/rate-limit) — ' + DATA.flights.length + ' avions simulés étiquetés', false);
   }
   if (state.layers.air) rebuild();
   updateNet();
@@ -739,15 +845,18 @@ async function loadShips() {
   try {
     const j = await fetchJSON(API.ais, 15000);
     const out = [];
-    for (const f of (j && j.features) || []) {
+    const feats = (j && j.features) || (Array.isArray(j && j.vessels) ? j.vessels.map(v => ({ geometry: { coordinates: [v.lon, v.lat] }, properties: v })) : []);
+    for (const f of feats) {
       const c = f.geometry && f.geometry.coordinates;
       const pr = f.properties || {};
       if (!c || c.length < 2 || !isFinite(+c[1]) || !isFinite(+c[0])) continue;
+      const type = pr.shiptype || pr.type || pr.vesseltype || null;
+      const sog = pr.sog != null ? +pr.sog * 1.852 : null;
       out.push({
         layer: 'ship', lat: +c[1], lng: +c[0],
-        name: pr.name || ('MMSI ' + pr.mmsi),
-        metric: 'vitesse ' + ((pr.sog != null ? pr.sog * 1.852 : 0).toFixed(1)) + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
-        color: '#4cc9f0'
+        name: pr.name || ('MMSI ' + (pr.mmsi || '—')), type: type,
+        metric: 'vitesse ' + (sog != null ? sog.toFixed(1) : '—') + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
+        color: (type && SHIP_COLORS[type]) || '#4cc9f0'
       });
       if (out.length >= 300) break;
     }
@@ -760,7 +869,7 @@ async function loadShips() {
     DATA.vesselsLive = false;
     state.net.ais = 'cache';
     if (!DATA.vessels.length) seedSyntheticShips();
-    logLoad('AIS indisponible — ' + DATA.vessels.length + ' navires simulés sur les routes maritimes', false);
+    logLoad('AIS indisponible — ' + DATA.vessels.length + ' navires simulés étiquetés sur les routes maritimes', false);
   }
   if (state.layers.ships) rebuild();
   updateNet();
@@ -774,7 +883,7 @@ function setStaticView(v) {
     state.autoRotate = false;
     if (world) world.controls().autoRotate = false;
     const bp = $('#btnPlay');
-    if (bp) bp.textContent = '▶ Rotation auto';
+    if (bp) bp.textContent = '▶';
   }
   if (world) world.ringPropagationSpeed(v ? 0 : 2.4);
   rebuild();
@@ -965,7 +1074,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'REST Countries', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'OpenSky avions', ais: 'AIS navires' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / OpenSky)', ais: 'AIS navires (Open Waters)' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');
@@ -1121,7 +1230,7 @@ function buildPanel() {
     if (state.staticView) setStaticView(false);
     state.autoRotate = !state.autoRotate;
     world.controls().autoRotate = state.autoRotate;
-    $('#btnPlay').textContent = state.autoRotate ? '⏸ Rotation auto' : '▶ Rotation auto';
+    $('#btnPlay').textContent = state.autoRotate ? '⏸' : '▶';
   });
   $('#btnStatic').addEventListener('click', () => setStaticView(!state.staticView));
   $('#btnReset').addEventListener('click', () => {
@@ -1129,7 +1238,7 @@ function buildPanel() {
     $('#btnIss').classList.remove('on');
     state.autoRotate = true;
     world.controls().autoRotate = true;
-    $('#btnPlay').textContent = '⏸ Rotation auto';
+    $('#btnPlay').textContent = '⏸';
     world.pointOfView({ lat: 24, lng: 8, altitude: 2.4 }, 1400);
   });
   $('#panelClose').addEventListener('click', () => { $('#panel').classList.add('collapsed'); $('#panelToggle').classList.remove('hidden'); });
@@ -1143,7 +1252,7 @@ function buildPanel() {
   });
   setMode('satellite');
   setChoro('none');
-  $('#btnPlay').textContent = state.autoRotate ? '⏸ Rotation auto' : '▶ Rotation auto';
+  $('#btnPlay').textContent = state.autoRotate ? '⏸' : '▶';
   setupSearch();
 }
 
@@ -1165,6 +1274,8 @@ async function init() {
   logLoad('Moteur WebGL (globe.gl / three.js) initialisé', true);
   loadWaterMask();
   await loadStatic();
+  seedSyntheticFlights();
+  seedSyntheticShips();
   await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank(), loadFlights(), loadShips()]);
   buildScales();
   rebuild();
