@@ -46,13 +46,14 @@ const state = {
   iss: { lat: 0, lng: 0, altitude: 408, velocity: 27600, live: false },
   followIss: false,
   autoRotate: !IS_MOBILE,
+  staticView: false,
   flash: null,
   probe: null,
   selected: null,
   scales: {}
 };
 
-const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null };
+const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null, flights: [], vessels: [], flightsLive: false, vesselsLive: false };
 
 const LAYER_DEFS = [
   { id: 'countries', domain: 'Terre & géopolitique', label: 'Frontières & pays' },
@@ -65,8 +66,8 @@ const LAYER_DEFS = [
   { id: 'shipping', domain: 'Océans & bathymétrie', label: 'Routes maritimes, ports & détroits' },
   { id: 'cables', domain: 'Océans & bathymétrie', label: 'Câbles sous-marins' },
   { id: 'trenches', domain: 'Océans & bathymétrie', label: 'Fosses abyssales' },
-  { id: 'air', domain: 'Flux & transports mondiaux', label: 'Routes aériennes' },
-  { id: 'ships', domain: 'Flux & transports mondiaux', label: 'Navires (trafic mondial)' },
+  { id: 'air', domain: 'Flux & transports mondiaux', label: 'Avions en direct (OpenSky)' },
+  { id: 'ships', domain: 'Flux & transports mondiaux', label: 'Navires en direct (AIS)' },
   { id: 'clouds', domain: 'Atmosphère & espace proche', label: 'Nuageuse & halo atmosphérique' },
   { id: 'iss', domain: 'Atmosphère & espace proche', label: 'ISS — suivi live' }
 ];
@@ -89,6 +90,7 @@ let world = null, R = 100, cloudMesh = null, issMesh = null, issLabel = null;
 let bumpTex = null, nightTex = null, waterTex = null;
 let SEARCH_INDEX = [];
 let globeReady = false, bootDone = false;
+let lastPts = [], lastLbl = [], lastDyn = 0;
 const bootT0 = Date.now();
 function maybeHideLoader() {
   if (bootDone && (globeReady || Date.now() - bootT0 > 12000)) {
@@ -393,7 +395,11 @@ function applyCustomVisibility() {
 
 function tick() {
   requestAnimationFrame(tick);
-  if (cloudMesh && cloudMesh.parent) cloudMesh.rotation.y += 0.00045;
+  if (cloudMesh && cloudMesh.parent && !state.staticView) cloudMesh.rotation.y += 0.00045;
+  if (Date.now() - lastDyn > 5000) {
+    lastDyn = Date.now();
+    if ((state.layers.air && !DATA.flightsLive) || (state.layers.ships && !DATA.vesselsLive)) advanceSynthetic();
+  }
   if (issMesh && issMesh.parent && state.iss) {
     const alt = (state.iss.altitude || 408) / 6371;
     const c = world.getCoords(state.iss.lat, state.iss.lng, alt);
@@ -440,7 +446,7 @@ function rebuild() {
 
   if (on('currents')) for (const c of CURRENTS) arcs.push({
     layer: 'current', name: c.name, a: c.a, b: c.b, color: c.warm ? '#ff8c42' : '#4cc9f0', stroke: 0.55,
-    dashLen: 0.25, dashGap: 0.12, dashTime: 5200, metric: c.warm ? 'Courant chaud' : 'Courant froid'
+    dashLen: 0.25, dashGap: 0.12, dashTime: state.staticView ? 0 : 5200, metric: c.warm ? 'Courant chaud' : 'Courant froid'
   });
 
   if (on('shipping')) {
@@ -459,17 +465,19 @@ function rebuild() {
     lbl.push(Object.assign({ layer: 'trench' }, t));
   }
 
-  if (on('air')) for (const r of AIR_ROUTES) arcs.push({ layer: 'air', name: r.name, a: r.a, b: r.b, color: '#e0f2fe', stroke: 0.4, alt: 0.035, dashLen: 0.12, dashGap: 0.1, dashTime: 2600, metric: 'Ligne long-courrier' });
+  if (on('air')) {
+    for (const p of DATA.flights) pts.push(p);
+    for (const p of DATA.flights.slice(0, 150)) lbl.push(p);
+  }
 
-  if (on('ships')) for (const s of SHIPS) {
-    const p = { layer: 'ship', lat: s.lat, lng: s.lng, name: s.name, type: s.type, metric: s.type + ' · ' + s.metric, color: SHIP_COLORS[s.type] || '#ffffff' };
-    pts.push(p);
-    lbl.push(Object.assign({}, p));
+  if (on('ships')) {
+    for (const s of DATA.vessels) { pts.push(s); lbl.push(s); }
   }
 
   if (state.flash && Date.now() < state.flash.until) rings.push({ lat: state.flash.lat, lng: state.flash.lng, color: '#ffffff', maxR: 2.6, period: 1900 });
   if (state.probe) rings.push({ lat: state.probe.lat, lng: state.probe.lng, color: '#ffd166', maxR: 1.7, period: 1500 });
 
+  lastPts = pts; lastLbl = lbl;
   world.pointsData(pts);
   world.labelsData(lbl);
   world.arcsData(arcs);
@@ -493,8 +501,8 @@ function layerCounts() {
     shipping: ROUTES.length + PORTS.length + STRAITS.length,
     cables: CABLES.length,
     trenches: TRENCHES.length,
-    air: AIR_ROUTES.length,
-    ships: SHIPS.length,
+    air: DATA.flights.length,
+    ships: DATA.vessels.length,
     clouds: '—',
     iss: '1'
   };
@@ -515,7 +523,7 @@ function updateLegend() {
   if (state.layers.cables) items.push('<span class="chip"><i style="background:#c77dff"></i>Câble sous-marin</span>');
   if (state.layers.eonet) { items.push('<span class="chip"><i style="background:#ff6d00"></i>Feux</span>'); items.push('<span class="chip"><i style="background:#ffd60a"></i>Tempête</span>'); items.push('<span class="chip"><i style="background:#ff2d55"></i>Volcan actif</span>'); items.push('<span class="chip"><i style="background:#90e0ef"></i>Glace dérivante</span>'); }
   if (state.layers.trenches) items.push('<span class="chip"><i style="background:#80ffdb"></i>Fosse abyssale</span>');
-  if (state.layers.air) items.push('<span class="chip"><i style="background:#e0f2fe"></i>Route aérienne</span>');
+  if (state.layers.air) items.push('<span class="chip"><i style="background:#ffd166"></i>Avion (couleur = altitude)</span>');
   if (state.layers.ships) { items.push('<span class="chip"><i style="background:#ffd166"></i>Porte-conteneurs</span>'); items.push('<span class="chip"><i style="background:#ff6b6b"></i>Pétrolier</span>'); items.push('<span class="chip"><i style="background:#4cc9f0"></i>Cargo</span>'); items.push('<span class="chip"><i style="background:#8d99ae"></i>Vraquier</span>'); }
   if (state.layers.countries && state.choro !== 'none') items.push('<span class="chip">Choroplèthe : ' + (state.choro === 'pop' ? 'population (échelle log)' : 'PIB en Mds € (échelle log)') + '</span>');
   if (!items.length) { el.classList.add('hidden'); return; }
@@ -548,6 +556,7 @@ function describe(d) {
     case 'peak': return { t: d.name, c: 'Sommet', m: 'Altitude : ' + fmt(d.elev) + ' m' };
     case 'trench': return { t: d.name, c: 'Fosse abyssale', m: d.metric };
     case 'fault': return { t: d.name, c: 'Limite de plaque tectonique', m: d.metric || '' };
+    case 'plane': return { t: d.name, c: 'Avion en direct', m: d.metric || '' };
     case 'air': return { t: d.name, c: 'Route aérienne', m: d.metric || 'Ligne long-courrier' };
     case 'ship': return { t: d.name, c: 'Navire · ' + (d.type || ''), m: d.metric || '' };
     default: return { t: d.name || d.layer, c: d.layer, m: d.metric || '' };
@@ -637,10 +646,138 @@ function detailBody(d) {
     case 'peak': return row('Altitude', fmt(d.elev) + ' m') + row('Type', 'Grand relief (donnée embarquée)');
     case 'trench': return row('Profondeur', esc(d.metric)) + row('Type', 'Fosse océanique abyssale');
     case 'fault': return row('Longueur / type', esc(d.metric || 'Limite de plaque majeure'));
+    case 'plane': return row('Indicatif', esc(d.name)) + row('Données de vol', esc(d.metric || '—')) + row('Source', DATA.flightsLive ? 'OpenSky Network — live' : 'simulation embarquée (secours)');
     case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
     case 'ship': return row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', 'Trafic maritime mondial — positions types embarquées');
     default: return '';
   }
+}
+
+function planeColor(alt) { return alt == null ? '#e0f2fe' : alt < 6000 ? '#4cc9f0' : alt < 11000 ? '#ffd166' : '#ff8c42'; }
+
+function posAlong(points, f) {
+  const n = Math.max(1, points.length - 1);
+  const x = clamp(f, 0, 1) * n;
+  const i = Math.min(n - 1, Math.floor(x));
+  const t = x - i;
+  const a = points[i], b = points[i + 1];
+  let dl = b[1] - a[1];
+  if (dl > 180) dl -= 360; if (dl < -180) dl += 360;
+  let lng = a[1] + dl * t;
+  lng = ((lng + 540) % 360) - 180;
+  return [a[0] + (b[0] - a[0]) * t, lng];
+}
+
+function seedSyntheticFlights() {
+  DATA.flights = AIR_ROUTES.map((r, i) => ({
+    layer: 'plane', lat: r.a[0], lng: r.a[1], name: 'SIM-' + (i + 1),
+    routePts: [r.a, r.b], phase: i / AIR_ROUTES.length, speed: 0.015 + (i % 5) * 0.004,
+    metric: 'simulation embarquée', color: '#e0f2fe'
+  }));
+}
+
+function seedSyntheticShips() {
+  DATA.vessels = ROUTES.map((r, i) => ({
+    layer: 'ship', lat: r.points[0][0], lng: r.points[0][1], name: 'NAV-' + (i + 1),
+    routePts: r.points, phase: i / ROUTES.length, speed: 0.008 + (i % 4) * 0.003,
+    metric: 'simulation embarquée', color: '#4cc9f0'
+  }));
+}
+
+function advanceSynthetic() {
+  const t = Date.now() / 1000;
+  let moved = false;
+  for (const p of DATA.flights) {
+    if (!p.routePts) continue;
+    const f = (p.phase + t * p.speed / 60) % 1;
+    const pos = posAlong(p.routePts, f);
+    p.lat = pos[0]; p.lng = pos[1]; moved = true;
+  }
+  for (const s of DATA.vessels) {
+    if (!s.routePts) continue;
+    const f = (s.phase + t * s.speed / 60) % 1;
+    const pos = posAlong(s.routePts, f);
+    s.lat = pos[0]; s.lng = pos[1]; moved = true;
+  }
+  if (moved && world && lastPts.length) {
+    world.pointsData(lastPts);
+    world.labelsData(lastLbl);
+  }
+}
+
+async function loadFlights() {
+  try {
+    const j = await fetchJSON(API.opensky, 15000);
+    const out = [];
+    for (const s of (j && j.states) || []) {
+      const lon = s[5], lat = s[6], alt = s[7], ground = s[8], vel = s[9], hdg = s[10];
+      if (ground || lat == null || lon == null) continue;
+      out.push({
+        layer: 'plane', lat: +lat, lng: +lon,
+        name: (s[1] || '').trim() || String(s[0]),
+        metric: 'alt ' + fmt((alt || 0) * 3.28084) + ' ft · ' + fmt((vel || 0) * 3.6) + ' km/h · cap ' + fmt(hdg || 0) + '°',
+        color: planeColor(alt)
+      });
+      if (out.length >= 400) break;
+    }
+    if (!out.length) throw new Error('flux vide');
+    DATA.flights = out;
+    DATA.flightsLive = true;
+    state.net.opensky = 'live';
+    logLoad('OpenSky — ' + out.length + ' avions en direct', true);
+  } catch (e) {
+    DATA.flightsLive = false;
+    state.net.opensky = 'cache';
+    if (!DATA.flights.length) seedSyntheticFlights();
+    logLoad('OpenSky indisponible — ' + DATA.flights.length + ' avions simulés sur les routes aériennes', false);
+  }
+  if (state.layers.air) rebuild();
+  updateNet();
+}
+
+async function loadShips() {
+  try {
+    const j = await fetchJSON(API.ais, 15000);
+    const out = [];
+    for (const f of (j && j.features) || []) {
+      const c = f.geometry && f.geometry.coordinates;
+      const pr = f.properties || {};
+      if (!c || c.length < 2 || !isFinite(+c[1]) || !isFinite(+c[0])) continue;
+      out.push({
+        layer: 'ship', lat: +c[1], lng: +c[0],
+        name: pr.name || ('MMSI ' + pr.mmsi),
+        metric: 'vitesse ' + ((pr.sog != null ? pr.sog * 1.852 : 0).toFixed(1)) + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
+        color: '#4cc9f0'
+      });
+      if (out.length >= 300) break;
+    }
+    if (!out.length) throw new Error('flux vide');
+    DATA.vessels = out;
+    DATA.vesselsLive = true;
+    state.net.ais = 'live';
+    logLoad('AIS Open Waters — ' + out.length + ' navires en direct', true);
+  } catch (e) {
+    DATA.vesselsLive = false;
+    state.net.ais = 'cache';
+    if (!DATA.vessels.length) seedSyntheticShips();
+    logLoad('AIS indisponible — ' + DATA.vessels.length + ' navires simulés sur les routes maritimes', false);
+  }
+  if (state.layers.ships) rebuild();
+  updateNet();
+}
+
+function setStaticView(v) {
+  state.staticView = v;
+  const b = $('#btnStatic');
+  if (b) b.classList.toggle('on', v);
+  if (v) {
+    state.autoRotate = false;
+    if (world) world.controls().autoRotate = false;
+    const bp = $('#btnPlay');
+    if (bp) bp.textContent = '▶ Rotation auto';
+  }
+  if (world) world.ringPropagationSpeed(v ? 0 : 2.4);
+  rebuild();
 }
 
 function loadWaterMask() {
@@ -828,7 +965,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'REST Countries', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'REST Countries', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'OpenSky avions', ais: 'AIS navires' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');
@@ -981,10 +1118,12 @@ function buildPanel() {
     rebuild();
   });
   $('#btnPlay').addEventListener('click', () => {
+    if (state.staticView) setStaticView(false);
     state.autoRotate = !state.autoRotate;
     world.controls().autoRotate = state.autoRotate;
     $('#btnPlay').textContent = state.autoRotate ? '⏸ Rotation auto' : '▶ Rotation auto';
   });
+  $('#btnStatic').addEventListener('click', () => setStaticView(!state.staticView));
   $('#btnReset').addEventListener('click', () => {
     state.followIss = false;
     $('#btnIss').classList.remove('on');
@@ -1026,12 +1165,14 @@ async function init() {
   logLoad('Moteur WebGL (globe.gl / three.js) initialisé', true);
   loadWaterMask();
   await loadStatic();
-  await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank()]);
+  await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank(), loadFlights(), loadShips()]);
   buildScales();
   rebuild();
   updateNet();
   setInterval(loadIss, 5000);
   setInterval(() => { loadQuakes(); loadEonet(); }, 60000);
+  setInterval(loadFlights, 45000);
+  setInterval(loadShips, 60000);
   logLoad('Toutes les couches sont prêtes — globe interactif', true);
   bootDone = true;
   maybeHideLoader();

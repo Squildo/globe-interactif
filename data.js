@@ -18,6 +18,8 @@ const API = {
     gdp: 'https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=20000&date=2023:2026',
     pop: 'https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=20000&date=2023:2026'
   },
+  opensky: 'https://opensky-network.org/api/states/all',
+  ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,101,4,104&bbox=29,31,31,33&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,52,2&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55.5,27,57.5&bbox=10,110,14,113&bbox=53,2,56,6&bbox=32,-80,36,-74',
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
   eonetAlt: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50',
