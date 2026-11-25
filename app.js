@@ -52,7 +52,7 @@ const state = {
   scales: {}
 };
 
-const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null };
+const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null };
 
 const LAYER_DEFS = [
   { id: 'countries', domain: 'Terre & géopolitique', label: 'Frontières & pays' },
@@ -258,12 +258,24 @@ function setupGlobe() {
   }
 }
 
+function countryIso(p) {
+  return (p.ISO_A3 && p.ISO_A3 !== '-99' && p.ISO_A3) || p.ADM0_A3 || '';
+}
+
+function countryVals(p) {
+  const iso = countryIso(p);
+  const wb = DATA.wb;
+  const pop = wb && wb.pop[iso] != null ? wb.pop[iso] : (+p.POP_EST || 0);
+  const gdpUS = wb && wb.gdp[iso] != null ? wb.gdp[iso] : (+p.GDP_MD_EST > 0 ? +p.GDP_MD_EST * 1e6 : 0);
+  return { pop, gdpEUR: gdpUS / 1e9 * USD_EUR };
+}
+
 function capColor(f) {
   if (!f || !f.properties) return 'rgba(90,130,190,.55)';
   if (state.hoverPoly === f) return '#ffd166';
   if (state.choro === 'none') return 'rgba(90,130,190,.55)';
-  const p = f.properties;
-  const v = +(state.choro === 'pop' ? p.POP_EST : p.GDP_MD_EST);
+  const cv = countryVals(f.properties);
+  const v = state.choro === 'pop' ? cv.pop : cv.gdpEUR;
   if (!isFinite(v) || v <= 0) return 'rgba(70,80,105,.5)';
   const s = state.scales[state.choro];
   if (!s) return 'rgba(90,130,190,.55)';
@@ -271,11 +283,37 @@ function capColor(f) {
   return s.fn(t);
 }
 
+async function loadWorldBank() {
+  const out = { gdp: {}, pop: {}, year: {} };
+  try {
+    const pair = await Promise.all([fetchJSON(API.worldbank.gdp, 20000), fetchJSON(API.worldbank.pop, 20000)]);
+    const ingest = (rows, key) => {
+      for (const r of (rows && rows[1]) || []) {
+        const c = r.countryiso3code;
+        if (!c || c.length !== 3 || r.value == null) continue;
+        const y = +r.date;
+        if (out[key][c] == null || y > out.year[c + key]) { out[key][c] = +r.value; out.year[c + key] = y; }
+      }
+    };
+    ingest(pair[0], 'gdp');
+    ingest(pair[1], 'pop');
+    if (!Object.keys(out.gdp).length && !Object.keys(out.pop).length) throw new Error('flux vide');
+    DATA.wb = out;
+    state.net.worldbank = 'live';
+    const gy = Math.max.apply(null, Object.keys(out.year).map(k => out.year[k]).concat([0]));
+    logLoad('Banque mondiale — PIB & population, dernière année dispo : ' + gy + ' (PIB converti en € au taux indicatif 1 $ = ' + USD_EUR + ' €)', true);
+  } catch (e) {
+    DATA.wb = null;
+    state.net.worldbank = 'cache';
+    logLoad('Banque mondiale indisponible — secours Natural Earth (~2022), PIB converti en € (taux indicatif ' + USD_EUR + ')', false);
+  }
+}
+
 function buildScales() {
   if (!DATA.countries || !window.d3) return;
-  const fs = DATA.countries.features;
-  const pops = fs.map(f => +f.properties.POP_EST).filter(v => v > 0);
-  const gdps = fs.map(f => +f.properties.GDP_MD_EST).filter(v => v > 0);
+  const vals = DATA.countries.features.map(f => countryVals(f.properties));
+  const pops = vals.map(v => v.pop).filter(v => v > 0);
+  const gdps = vals.map(v => v.gdpEUR).filter(v => v > 0);
   state.scales.pop = { max: Math.max.apply(null, pops.concat([1])), fn: t => d3.interpolateYlOrRd(t) };
   state.scales.gdp = { max: Math.max.apply(null, gdps.concat([1])), fn: t => d3.interpolateViridis(t) };
 }
@@ -479,7 +517,7 @@ function updateLegend() {
   if (state.layers.trenches) items.push('<span class="chip"><i style="background:#80ffdb"></i>Fosse abyssale</span>');
   if (state.layers.air) items.push('<span class="chip"><i style="background:#e0f2fe"></i>Route aérienne</span>');
   if (state.layers.ships) { items.push('<span class="chip"><i style="background:#ffd166"></i>Porte-conteneurs</span>'); items.push('<span class="chip"><i style="background:#ff6b6b"></i>Pétrolier</span>'); items.push('<span class="chip"><i style="background:#4cc9f0"></i>Cargo</span>'); items.push('<span class="chip"><i style="background:#8d99ae"></i>Vraquier</span>'); }
-  if (state.layers.countries && state.choro !== 'none') items.push('<span class="chip">Choroplèthe : ' + (state.choro === 'pop' ? 'population (échelle log)' : 'PIB (échelle log)') + '</span>');
+  if (state.layers.countries && state.choro !== 'none') items.push('<span class="chip">Choroplèthe : ' + (state.choro === 'pop' ? 'population (échelle log)' : 'PIB en Mds € (échelle log)') + '</span>');
   if (!items.length) { el.classList.add('hidden'); return; }
   el.innerHTML = '<div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1.5">Légende</div><div class="flex flex-wrap gap-1.5">' + items.join('') + '</div>';
   el.classList.remove('hidden');
@@ -489,10 +527,11 @@ function describe(d) {
   switch (d.layer) {
     case 'country': {
       const p = d.ref.properties;
+      const cv = countryVals(p);
       return {
         t: p.NAME || 'Pays',
         c: 'Pays · ' + (p.CONTINENT || '—'),
-        m: state.choro === 'pop' ? 'Population : ' + fmt(p.POP_EST) + ' hab.' : state.choro === 'gdp' ? 'PIB : ' + fmt(p.GDP_MD_EST) + ' M$ US' : 'Pop. ' + fmt(p.POP_EST) + ' · PIB ' + fmt(p.GDP_MD_EST) + ' M$'
+        m: state.choro === 'pop' ? 'Population : ' + fmt(cv.pop) + ' hab.' : state.choro === 'gdp' ? 'PIB : ≈ ' + fmt(cv.gdpEUR) + ' Mds €' : 'Pop. ' + fmt(cv.pop) + ' · PIB ≈ ' + fmt(cv.gdpEUR) + ' Mds €'
       };
     }
     case 'city': return { t: d.name, c: 'Mégapole', m: 'Population : ' + fmt(d.pop) + ' hab.' };
@@ -554,8 +593,12 @@ function detailBody(d) {
       const p = d.ref.properties;
       const rc = DATA.rcMap && (DATA.rcMap.get(p.ISO_A3) || DATA.rcMap.get(p.ADM0_A3) || (DATA.rcName && DATA.rcName.get(normStr(p.NAME))));
       let h = row('Continent', esc(p.CONTINENT || '—')) + row('Sous-région', esc(p.SUBREGION || '—'));
-      h += row('Population (est. Natural Earth)', fmt(p.POP_EST) + ' hab.');
-      h += row('PIB (est. Natural Earth)', fmt(p.GDP_MD_EST) + ' M$ US');
+      const iso = countryIso(p);
+      const wb = DATA.wb;
+      if (wb && wb.pop[iso] != null) h += row('Population (Banque mondiale ' + (wb.year[iso + 'pop'] || '?') + ')', fmt(wb.pop[iso]) + ' hab.');
+      else h += row('Population (Natural Earth ~2022)', fmt(p.POP_EST) + ' hab.');
+      if (wb && wb.gdp[iso] != null) h += row('PIB (Banque mondiale ' + (wb.year[iso + 'gdp'] || '?') + ')', '≈ ' + fmt(wb.gdp[iso] / 1e9 * USD_EUR) + ' Mds € (taux indicatif 1 $ = ' + USD_EUR + ' €)');
+      else h += row('PIB (Natural Earth ~2022, converti)', '≈ ' + fmt((+p.GDP_MD_EST > 0 ? +p.GDP_MD_EST / 1000 : 0) * USD_EUR) + ' Mds € (taux ' + USD_EUR + ')');
       if (rc) {
         h += row('Population (ONU)', fmt(rc.population) + ' hab.');
         h += row('Superficie', fmt(rc.area) + ' km²');
@@ -785,7 +828,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'REST Countries', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'REST Countries', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');
@@ -983,8 +1026,8 @@ async function init() {
   logLoad('Moteur WebGL (globe.gl / three.js) initialisé', true);
   loadWaterMask();
   await loadStatic();
+  await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank()]);
   buildScales();
-  await Promise.all([loadQuakes(), loadEonet(), loadIss()]);
   rebuild();
   updateNet();
   setInterval(loadIss, 5000);

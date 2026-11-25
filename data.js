@@ -14,6 +14,10 @@ const API = {
     'https://restcountries.com/v3.1/all?fields=name,cca3,population,area,region,capital,latlng,landlocked',
     'https://restcountries.com/v3.1/all'
   ],
+  worldbank: {
+    gdp: 'https://api.worldbank.org/v2/country/all/indicator/NY.GDP.MKTP.CD?format=json&per_page=20000&date=2023:2026',
+    pop: 'https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL?format=json&per_page=20000&date=2023:2026'
+  },
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
   eonetAlt: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50',
@@ -21,6 +25,8 @@ const API = {
   meteo: (lat, lng) => 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng + '&current=temperature_2m,wind_speed_10m,wind_direction_10m',
   marine: (lat, lng) => 'https://marine-api.open-meteo.com/v1/marine?latitude=' + lat + '&longitude=' + lng + '&current=wave_height,wave_direction,wave_period,ocean_current_velocity,ocean_current_direction'
 };
+
+const USD_EUR = 0.92;
 
 const RANGES = [
   { name: 'Himalaya', metric: '8 848 m (Everest)', points: [[34.6,73.0],[35.5,74.5],[36.2,74.0],[35.0,76.5],[33.9,75.0],[32.5,77.0],[31.5,78.0],[30.4,79.5],[29.5,81.5],[28.5,84.0],[27.99,86.93],[28.2,87.5],[27.7,88.1],[27.0,88.3],[26.4,88.0],[25.7,88.0],[25.2,88.0]] },
