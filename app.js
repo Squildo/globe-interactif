@@ -33,7 +33,7 @@ function logLoad(msg, ok) {
   el.scrollTop = el.scrollHeight;
 }
 
-const THREE = window.THREE || null;
+let THREE = null;
 
 const state = {
   mode: 'satellite',
@@ -877,7 +877,8 @@ function setupEvents() {
 }
 
 async function init() {
-  if (!window.Globe) { logLoad('ERREUR : globe.gl non chargé (CDN injoignable ?)', false); return; }
+  THREE = window.THREE || null;
+  if (!window.Globe) { logLoad('ERREUR : globe.gl non chargé (CDN injoignable ?)' + (window.__LIBS_ERROR ? ' — ' + window.__LIBS_ERROR : ''), false); return; }
   if (!THREE) logLoad('Avertissement : THREE absent — objets 3D personnalisés (nuages, ISS) désactivés', false);
   buildPanel();
   setupGlobe();
@@ -898,4 +899,9 @@ async function init() {
   world.pointOfView({ lat: 24, lng: 8, altitude: 2.4 }, 2200);
 }
 
-init();
+let bootTries = 0;
+function boot() {
+  if (window.Globe || ++bootTries > 160) init();
+  else setTimeout(boot, 50);
+}
+boot();

@@ -176,11 +176,19 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
   <div id="loaderLog"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three"></script>
-<script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3"></script>
+<script type="module">
+  try {
+    window.THREE = await import('https://cdn.jsdelivr.net/npm/three@0.187.0/+esm');
+    const Globe = (await import('https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/+esm')).default;
+    window.Globe = Globe;
+  } catch (e) {
+    console.error('Chargement ESM des librairies KO :', e);
+    window.__LIBS_ERROR = String((e && e.message) || e);
+  }
+</script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
