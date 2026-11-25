@@ -222,8 +222,10 @@ function setupGlobe() {
       refreshPoly();
     })
     .onPolygonClick(d => { const f = d && polyFeature(d); if (f) openDetail(polyItem(f)); })
-    .onGlobeClick(coords => { if (coords && isFinite(coords.lat) && isFinite(coords.lng)) probeAt(coords.lat, coords.lng); })
-    .pointsTransitionDuration(0).arcsTransitionDuration(0).polygonsTransitionDuration(0).pathsTransitionDuration(0).labelsTransitionDuration(0);
+    .onGlobeClick(coords => { if (coords && isFinite(coords.lat) && isFinite(coords.lng)) probeAt(coords.lat, coords.lng); });
+  for (const m of ['pointsTransitionDuration', 'arcsTransitionDuration', 'polygonsTransitionDuration', 'pathsTransitionDuration', 'pathTransitionDuration', 'labelsTransitionDuration']) {
+    if (typeof world[m] === 'function') world[m](0);
+  }
 }
 
 function capColor(f) {
