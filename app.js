@@ -617,14 +617,34 @@ async function probeAt(lat, lng) {
   updateNet();
 }
 
+async function loadRestCountries() {
+  for (const url of (API.restcountriesUrls || [])) {
+    try {
+      const j = await fetchJSON(url, 25000);
+      if (Array.isArray(j) && j.length) {
+        DATA.restcountries = j;
+        state.net.restcountries = 'live';
+        buildRc(j);
+        logLoad('Enrichissement REST Countries v3.1 — OK (' + j.length + ' pays)', true);
+        return;
+      }
+    } catch (e) { /* on tente l'URL suivante */ }
+  }
+  const fb = FALLBACK_RC.map(a => ({ cca3: a[0], name: { common: a[1] }, population: a[2], area: a[3], region: a[4], capital: [a[5]], latlng: [a[6], a[7]], landlocked: a[8] }));
+  DATA.restcountries = fb;
+  state.net.restcountries = 'cache';
+  buildRc(fb);
+  logLoad('REST Countries indisponible — enrichissement embarqué sur ' + fb.length + ' grands pays (mode cache)', false);
+}
+
 async function loadStatic() {
   const jobs = [
     ['countries', 'Frontières & pays (Natural Earth 110m)', API.countries],
     ['cities', 'Villes & capitales (Natural Earth 110m)', API.cities],
-    ['volcanoes', 'Base mondiale des volcans', API.volcanoes],
-    ['restcountries', 'Enrichissement REST Countries v3.1', API.restcountries]
+    ['volcanoes', 'Base mondiale des volcans', API.volcanoes]
   ];
-  const res = await Promise.allSettled(jobs.map(async j => [j[0], await fetchJSON(j[2], 16000)]));
+  const rcPromise = loadRestCountries();
+  const res = await Promise.allSettled(jobs.map(async j => [j[0], await fetchJSON(j[2], 20000)]));
   res.forEach((r, i) => {
     const key = jobs[i][0], label = jobs[i][1];
     if (r.status === 'fulfilled') {
@@ -637,11 +657,11 @@ async function loadStatic() {
       logLoad(label + ' — indisponible, jeu de secours embarqué', false);
     }
   });
+  await rcPromise;
   if (!DATA.cities) DATA.cities = FALLBACK_CITIES;
   DATA.cityPts = normCities(DATA.cities);
   DATA.volcPts = DATA.volcanoes ? normVolcanoes(DATA.volcanoes) : normVolcanoes(FALLBACK_VOLCANOES);
   if (!DATA.countries) logLoad('Couche « Frontières & pays » désactivée (dataset indisponible)', false);
-  if (DATA.restcountries) buildRc(DATA.restcountries);
 }
 
 async function loadQuakes() {
