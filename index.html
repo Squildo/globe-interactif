@@ -96,6 +96,15 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
 .spin { width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgba(94,160,255,.2); border-top-color: #5ea0ff; animation: sp 1s linear infinite; }
 @keyframes sp { to { transform: rotate(360deg); } }
 #loaderLog { width: min(440px, 82vw); max-height: 38vh; overflow: auto; font: 12px/1.75 ui-monospace, Menlo, monospace; color: #94a3b8; }
+@media (max-width: 640px) {
+  #panel { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 46vh; }
+  #panel.collapsed { transform: translateY(130%); }
+  #panelToggle { top: 8px; left: 8px; }
+  #detail { top: 8px; left: 8px; right: 8px; width: auto; max-height: 42vh; }
+  #legend { display: none !important; }
+  #issCard { top: 52px; right: 8px; bottom: auto; width: 238px; }
+  #tooltip { max-width: 220px; }
+}
 </style>
 </head>
 <body class="bg-ink text-slate-200 overflow-hidden">

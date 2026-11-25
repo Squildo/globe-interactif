@@ -34,17 +34,18 @@ function logLoad(msg, ok) {
 }
 
 let THREE = null;
+const IS_MOBILE = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '') || window.innerWidth < 700;
 
 const state = {
   mode: 'satellite',
   choro: 'none',
-  layers: { countries: true, cities: true, relief: true, quakes: true, eonet: true, geology: true, currents: true, shipping: true, cables: true, trenches: true, clouds: true, iss: true },
+  layers: { countries: false, cities: false, relief: false, quakes: false, eonet: false, geology: false, currents: false, shipping: false, cables: false, trenches: false, clouds: false, iss: false },
   net: {},
   mouse: { x: 0, y: 0 },
   hoverPoly: null,
   iss: { lat: 0, lng: 0, altitude: 408, velocity: 27600, live: false },
   followIss: false,
-  autoRotate: true,
+  autoRotate: !IS_MOBILE,
   flash: null,
   probe: null,
   selected: null,
@@ -180,17 +181,17 @@ function buildRc(j) {
 function setupGlobe() {
   const el = $('#globe');
   world = Globe({
-    rendererConfig: { antialias: true, alpha: false, powerPreference: 'high-performance' },
+    rendererConfig: { antialias: !IS_MOBILE, alpha: false, powerPreference: 'high-performance' },
     waitForGlobeReady: true
   })(el);
   world.width(window.innerWidth).height(window.innerHeight);
-  world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, IS_MOBILE ? 1.25 : 2));
   world.backgroundColor('#020409').backgroundImageUrl(IMG.stars);
   world.globeImageUrl(IMG.satellite).bumpImageUrl(IMG.topology);
   world.showAtmosphere(true).atmosphereColor('#5ea0ff').atmosphereAltitude(0.13);
   world.pointOfView({ lat: 24, lng: 8, altitude: 2.4 }, 0);
   const c = world.controls();
-  c.autoRotate = true; c.autoRotateSpeed = 0.5;
+  c.autoRotate = state.autoRotate; c.autoRotateSpeed = 0.5;
 
   try { world.globeMaterial().color.set(0x274060); } catch (e) {}
   try {
@@ -220,7 +221,8 @@ function setupGlobe() {
     .pointColor(d => d.color || '#ffffff')
     .pointRadius(d => d.layer === 'city' ? 0.22 + Math.min(0.5, Math.log10(1 + (d.pop || 0)) / 16) : d.layer === 'quake' ? 0.18 + (d.mag || 0) * 0.14 : (POINT_R[d.layer] || 0.3))
     .pointAltitude(d => d.layer === 'city' ? 0.012 + Math.min(0.035, Math.log10(1 + (d.pop || 0)) / 220) : 0.018)
-    .pointLabel(() => '').onPointHover(d => hoverObj(d)).onPointClick(d => { if (d) openDetail(d); })
+    .pointsMerge(true)
+    .pointLabel(() => '').onPointHover(d => hoverObj(d)).onPointClick(d => { if (d && !Array.isArray(d)) openDetail(d); })
     .labelsData([]).labelLat(d => d.lat).labelLng(d => d.lng).labelText(d => d.name)
     .labelAltitude(0.03).labelColor(() => 'rgba(228,238,255,.95)').labelSize(d => d.layer === 'city' ? 0.65 : 0.55)
     .labelDotRadius(d => d.layer === 'city' ? 0.22 : 0).labelResolution(2)
@@ -305,7 +307,7 @@ function initCustom() {
   R = world.getGlobeRadius();
   if (THREE) {
     cloudMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(R * 1.014, 72, 36),
+      new THREE.SphereGeometry(R * 1.014, 48, 24),
       new THREE.MeshBasicMaterial({ map: makeCloudTexture(), transparent: true, opacity: 0.5, depthWrite: false })
     );
     const g = new THREE.Group();
@@ -374,7 +376,7 @@ function rebuild() {
     const qs = DATA.quakes.slice().sort((a, b) => (b.mag || 0) - (a.mag || 0));
     qs.forEach((q, i) => {
       pts.push(q);
-      if (i < 90) rings.push({ lat: q.lat, lng: q.lng, color: q.color, maxR: 1 + (q.mag || 0) * 0.55, period: 1700 });
+      if (i < 50) rings.push({ lat: q.lat, lng: q.lng, color: q.color, maxR: 1 + (q.mag || 0) * 0.55, period: 1700 });
     });
   }
 
@@ -859,6 +861,12 @@ function setChoro(v) {
 function toggleFollowIss() {
   state.followIss = !state.followIss;
   $('#btnIss').classList.toggle('on', state.followIss);
+  if (state.followIss && !state.layers.iss) {
+    state.layers.iss = true;
+    const inp = document.querySelector('#layerList input[data-layer="iss"]');
+    if (inp) inp.checked = true;
+    rebuild();
+  }
   if (state.followIss && world) world.pointOfView({ lat: state.iss.lat, lng: state.iss.lng, altitude: 0.6 }, 1200);
 }
 
@@ -909,6 +917,7 @@ function buildPanel() {
   });
   setMode('satellite');
   setChoro('none');
+  $('#btnPlay').textContent = state.autoRotate ? '⏸ Rotation auto' : '▶ Rotation auto';
   setupSearch();
 }
 
