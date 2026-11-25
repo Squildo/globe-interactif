@@ -85,6 +85,14 @@ function quakeColor(depth) { return depth < 70 ? '#ff5252' : depth < 300 ? '#ffb
 let world = null, R = 100, cloudMesh = null, issMesh = null, issLabel = null;
 let bumpTex = null, nightTex = null, waterTex = null;
 let SEARCH_INDEX = [];
+let globeReady = false, bootDone = false;
+const bootT0 = Date.now();
+function maybeHideLoader() {
+  if (bootDone && (globeReady || Date.now() - bootT0 > 12000)) {
+    const l = $('#loader');
+    if (l && !l.classList.contains('done')) l.classList.add('done');
+  }
+}
 
 function polyItem(f) { return { layer: 'country', ref: f, name: (f.properties && f.properties.NAME) || 'Pays' }; }
 function polyFeature(d) { return d && d.data ? d.data : (d && d.properties ? d : null); }
@@ -183,6 +191,18 @@ function setupGlobe() {
   world.pointOfView({ lat: 24, lng: 8, altitude: 2.4 }, 0);
   const c = world.controls();
   c.autoRotate = true; c.autoRotateSpeed = 0.5;
+
+  try { world.globeMaterial().color.set(0x274060); } catch (e) {}
+  try {
+    const gl = world.renderer().getContext();
+    logLoad('WebGL OK — ' + ((gl && gl.getParameter(gl.VERSION)) || 'n/a'), true);
+  } catch (e) {}
+  world.onGlobeReady(() => { globeReady = true; logLoad('Texture du globe chargée — globe visible', true); maybeHideLoader(); });
+  for (const k of ['satellite', 'topology', 'stars']) {
+    const im = new Image();
+    im.onerror = () => logLoad('Texture ' + k + ' indisponible : ' + IMG[k], false);
+    im.src = IMG[k];
+  }
 
   if (THREE) {
     const tl = new THREE.TextureLoader();
@@ -903,7 +923,7 @@ async function init() {
   if (!window.Globe) { logLoad('ERREUR : globe.gl non chargé (CDN injoignable ?)' + (window.__LIBS_ERROR ? ' — ' + window.__LIBS_ERROR : ''), false); return; }
   if (!THREE) logLoad('Avertissement : THREE absent — objets 3D personnalisés (nuages, ISS) désactivés', false);
   buildPanel();
-  setupGlobe();
+  try { setupGlobe(); } catch (e) { console.error(e); logLoad('ERREUR moteur WebGL : ' + ((e && e.message) || e), false); return; }
   setupEvents();
   initCustom();
   requestAnimationFrame(tick);
@@ -917,7 +937,9 @@ async function init() {
   setInterval(loadIss, 5000);
   setInterval(() => { loadQuakes(); loadEonet(); }, 60000);
   logLoad('Toutes les couches sont prêtes — globe interactif', true);
-  setTimeout(() => $('#loader').classList.add('done'), 500);
+  bootDone = true;
+  maybeHideLoader();
+  setTimeout(maybeHideLoader, 12500);
   world.pointOfView({ lat: 24, lng: 8, altitude: 2.4 }, 2200);
 }
 
