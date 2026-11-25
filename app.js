@@ -39,7 +39,7 @@ const IS_MOBILE = (window.matchMedia && window.matchMedia('(pointer: coarse)').m
 const state = {
   mode: 'satellite',
   choro: 'none',
-  layers: { countries: false, cities: false, relief: false, quakes: false, eonet: false, geology: false, currents: false, shipping: false, cables: false, trenches: false, clouds: false, iss: false },
+  layers: { countries: false, cities: false, relief: false, quakes: false, eonet: false, geology: false, currents: false, shipping: false, cables: false, trenches: false, air: false, ships: false, clouds: false, iss: false },
   net: {},
   mouse: { x: 0, y: 0 },
   hoverPoly: null,
@@ -65,6 +65,8 @@ const LAYER_DEFS = [
   { id: 'shipping', domain: 'Océans & bathymétrie', label: 'Routes maritimes, ports & détroits' },
   { id: 'cables', domain: 'Océans & bathymétrie', label: 'Câbles sous-marins' },
   { id: 'trenches', domain: 'Océans & bathymétrie', label: 'Fosses abyssales' },
+  { id: 'air', domain: 'Flux & transports mondiaux', label: 'Routes aériennes' },
+  { id: 'ships', domain: 'Flux & transports mondiaux', label: 'Navires (trafic mondial)' },
   { id: 'clouds', domain: 'Atmosphère & espace proche', label: 'Nuageuse & halo atmosphérique' },
   { id: 'iss', domain: 'Atmosphère & espace proche', label: 'ISS — suivi live' }
 ];
@@ -106,6 +108,12 @@ function centroid(f) {
   let la = 0, lo = 0;
   for (const p of ring) { la += p[1]; lo += p[0]; }
   return { lat: la / ring.length, lng: lo / ring.length };
+}
+
+function cleanPath(pts) {
+  return (pts || [])
+    .filter(p => Array.isArray(p) && p.length >= 2 && isFinite(+p[0]) && isFinite(+p[1]) && +p[0] >= -90 && +p[0] <= 90 && +p[1] >= -180 && +p[1] <= 180)
+    .map(p => [+p[0], +p[1]]);
 }
 
 function normCities(j) {
@@ -228,15 +236,15 @@ function setupGlobe() {
     .labelDotRadius(d => d.layer === 'city' ? 0.22 : 0).labelResolution(2)
     .labelLabel(() => '').onLabelHover(d => hoverObj(d)).onLabelClick(d => { if (d) openDetail(d); })
     .arcsData([]).arcStartLat(d => d.a[0]).arcStartLng(d => d.a[1]).arcEndLat(d => d.b[0]).arcEndLng(d => d.b[1])
-    .arcColor(d => d.color).arcStroke(d => d.stroke).arcAltitude(0.012)
+    .arcColor(d => d.color).arcStroke(d => d.stroke).arcAltitude(d => d.alt || 0.012)
     .arcDashLength(d => d.dashLen || 0).arcDashGap(d => d.dashGap || 0).arcDashAnimateTime(d => d.dashTime || 0)
     .arcLabel(() => '').onArcHover(d => hoverObj(d)).onArcClick(d => { if (d) openDetail(d); })
-    .pathsData([]).pathPoints(d => d.points).pathColor(d => d.color).pathStroke(d => d.stroke).pathResolution(16)
+    .pathsData([]).pathPoints(d => d.points).pathPointLat(p => p[0]).pathPointLng(p => p[1]).pathColor(d => d.color).pathStroke(d => d.stroke).pathResolution(16)
     .pathLabel(() => '').onPathHover(d => hoverObj(d)).onPathClick(d => { if (d) openDetail(d); })
     .ringsData([]).ringLat(d => d.lat).ringLng(d => d.lng).ringColor(d => d.color)
     .ringMaxRadius(d => d.maxR).ringPropagationSpeed(2.4).ringRepeatPeriod(d => d.period || 1500)
     .polygonsData([]).polygonCapColor(f => capColor(f)).polygonSideColor(() => 'rgba(6,10,22,.45)')
-    .polygonStrokeColor(() => '#0a1020').polygonAltitude(0.004)
+    .polygonStrokeColor(() => '#0a1020').polygonAltitude(0.004).polygonCapCurvatureResolution(2)
     .polygonLabel(() => '')
     .onPolygonHover(d => {
       state.hoverPoly = d ? polyFeature(d) : null;
@@ -272,12 +280,14 @@ function buildScales() {
   state.scales.gdp = { max: Math.max.apply(null, gdps.concat([1])), fn: t => d3.interpolateViridis(t) };
 }
 
-let polyPending = false;
-function refreshPoly() {
-  if (polyPending || !world) return;
+let polyPending = false, polyLastHover = null;
+function refreshPoly(force) {
+  if (!world || polyPending) return;
+  if (!force && state.hoverPoly === polyLastHover) return;
   polyPending = true;
   requestAnimationFrame(() => {
     polyPending = false;
+    polyLastHover = state.hoverPoly;
     if (state.layers.countries && DATA.countries) world.polygonsData(DATA.countries.features);
   });
 }
@@ -367,8 +377,8 @@ function rebuild() {
   if (on('cities')) for (const c of DATA.cityPts) { pts.push(c); if (c.pop >= 2e6) lbl.push(c); }
 
   if (on('relief')) {
-    for (const r of RIVERS) paths.push({ layer: 'river', name: r.name, points: r.points, color: '#3a86ff', stroke: 0.9, metric: r.metric });
-    for (const m of RANGES) paths.push({ layer: 'range', name: m.name, points: m.points, color: '#b08968', stroke: 1.6, metric: m.metric });
+    for (const r of RIVERS) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'river', name: r.name, points: pp, color: '#3a86ff', stroke: 0.9, metric: r.metric }); }
+    for (const m of RANGES) { const pp = cleanPath(m.points); if (pp.length >= 2) paths.push({ layer: 'range', name: m.name, points: pp, color: '#b08968', stroke: 1.6, metric: m.metric }); }
     for (const p of PEAKS) { pts.push(p); lbl.push(p); }
   }
 
@@ -387,7 +397,7 @@ function rebuild() {
 
   if (on('geology')) {
     for (const v of DATA.volcPts) { if (v.elev >= 2000) pts.push(v); if (v.elev >= 3500) lbl.push(v); }
-    for (const f of FAULTS) paths.push({ layer: 'fault', name: f.name, points: f.points, color: '#ff2d55', stroke: 1.8, metric: f.metric });
+    for (const f of FAULTS) { const pp = cleanPath(f.points); if (pp.length >= 2) paths.push({ layer: 'fault', name: f.name, points: pp, color: '#ff2d55', stroke: 1.8, metric: f.metric }); }
   }
 
   if (on('currents')) for (const c of CURRENTS) arcs.push({
@@ -396,20 +406,27 @@ function rebuild() {
   });
 
   if (on('shipping')) {
-    for (const r of ROUTES) paths.push({ layer: 'route', name: r.name, points: r.points, color: '#ffd166', stroke: 1.2, metric: r.metric });
+    for (const r of ROUTES) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'route', name: r.name, points: pp, color: '#ffd166', stroke: 1.2, metric: r.metric }); }
     for (const p of PORTS) { pts.push({ layer: 'port', lat: p.lat, lng: p.lng, name: p.name, metric: p.metric, color: '#ffd166' }); lbl.push(Object.assign({ layer: 'port' }, p)); }
     for (const s of STRAITS) { pts.push({ layer: 'strait', lat: s.lat, lng: s.lng, name: s.name, metric: s.metric, color: '#4cc9f0' }); lbl.push(Object.assign({ layer: 'strait' }, s)); }
   }
 
   if (on('cables')) for (const c of CABLES) arcs.push({
-    layer: 'cable', name: c.name, a: c.a, b: c.b, color: '#c77dff', stroke: 0.45,
-    dashLen: 0.35, dashGap: 0.18, dashTime: 7000,
+    layer: 'cable', name: c.name, a: c.a, b: c.b, color: '#c77dff', stroke: 0.5,
     metric: fmt(c.km) + ' km · ' + c.tbsp + ' Tbps · ' + c.from + ' ↔ ' + c.to, ref: c
   });
 
   if (on('trenches')) for (const t of TRENCHES) {
     pts.push({ layer: 'trench', lat: t.lat, lng: t.lng, name: t.name, metric: t.metric, color: '#80ffdb' });
     lbl.push(Object.assign({ layer: 'trench' }, t));
+  }
+
+  if (on('air')) for (const r of AIR_ROUTES) arcs.push({ layer: 'air', name: r.name, a: r.a, b: r.b, color: '#e0f2fe', stroke: 0.4, alt: 0.035, dashLen: 0.12, dashGap: 0.1, dashTime: 2600, metric: 'Ligne long-courrier' });
+
+  if (on('ships')) for (const s of SHIPS) {
+    const p = { layer: 'ship', lat: s.lat, lng: s.lng, name: s.name, type: s.type, metric: s.type + ' · ' + s.metric, color: SHIP_COLORS[s.type] || '#ffffff' };
+    pts.push(p);
+    lbl.push(Object.assign({}, p));
   }
 
   if (state.flash && Date.now() < state.flash.until) rings.push({ lat: state.flash.lat, lng: state.flash.lng, color: '#ffffff', maxR: 2.6, period: 1900 });
@@ -438,6 +455,8 @@ function layerCounts() {
     shipping: ROUTES.length + PORTS.length + STRAITS.length,
     cables: CABLES.length,
     trenches: TRENCHES.length,
+    air: AIR_ROUTES.length,
+    ships: SHIPS.length,
     clouds: '—',
     iss: '1'
   };
@@ -458,6 +477,8 @@ function updateLegend() {
   if (state.layers.cables) items.push('<span class="chip"><i style="background:#c77dff"></i>Câble sous-marin</span>');
   if (state.layers.eonet) { items.push('<span class="chip"><i style="background:#ff6d00"></i>Feux</span>'); items.push('<span class="chip"><i style="background:#ffd60a"></i>Tempête</span>'); items.push('<span class="chip"><i style="background:#ff2d55"></i>Volcan actif</span>'); items.push('<span class="chip"><i style="background:#90e0ef"></i>Glace dérivante</span>'); }
   if (state.layers.trenches) items.push('<span class="chip"><i style="background:#80ffdb"></i>Fosse abyssale</span>');
+  if (state.layers.air) items.push('<span class="chip"><i style="background:#e0f2fe"></i>Route aérienne</span>');
+  if (state.layers.ships) { items.push('<span class="chip"><i style="background:#ffd166"></i>Porte-conteneurs</span>'); items.push('<span class="chip"><i style="background:#ff6b6b"></i>Pétrolier</span>'); items.push('<span class="chip"><i style="background:#4cc9f0"></i>Cargo</span>'); items.push('<span class="chip"><i style="background:#8d99ae"></i>Vraquier</span>'); }
   if (state.layers.countries && state.choro !== 'none') items.push('<span class="chip">Choroplèthe : ' + (state.choro === 'pop' ? 'population (échelle log)' : 'PIB (échelle log)') + '</span>');
   if (!items.length) { el.classList.add('hidden'); return; }
   el.innerHTML = '<div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1.5">Légende</div><div class="flex flex-wrap gap-1.5">' + items.join('') + '</div>';
@@ -488,6 +509,8 @@ function describe(d) {
     case 'peak': return { t: d.name, c: 'Sommet', m: 'Altitude : ' + fmt(d.elev) + ' m' };
     case 'trench': return { t: d.name, c: 'Fosse abyssale', m: d.metric };
     case 'fault': return { t: d.name, c: 'Limite de plaque tectonique', m: d.metric || '' };
+    case 'air': return { t: d.name, c: 'Route aérienne', m: d.metric || 'Ligne long-courrier' };
+    case 'ship': return { t: d.name, c: 'Navire · ' + (d.type || ''), m: d.metric || '' };
     default: return { t: d.name || d.layer, c: d.layer, m: d.metric || '' };
   }
 }
@@ -571,6 +594,8 @@ function detailBody(d) {
     case 'peak': return row('Altitude', fmt(d.elev) + ' m') + row('Type', 'Grand relief (donnée embarquée)');
     case 'trench': return row('Profondeur', esc(d.metric)) + row('Type', 'Fosse océanique abyssale');
     case 'fault': return row('Longueur / type', esc(d.metric || 'Limite de plaque majeure'));
+    case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
+    case 'ship': return row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', 'Trafic maritime mondial — positions types embarquées');
     default: return '';
   }
 }
@@ -788,6 +813,8 @@ function buildSearch() {
   for (const t of TRENCHES) push(t.name, 'Fosse abyssale · ' + t.metric, t.lat, t.lng, { layer: 'trench', lat: t.lat, lng: t.lng, name: t.name, metric: t.metric });
   for (const r of RIVERS) { const m = r.points[Math.floor(r.points.length / 2)]; push(r.name, 'Grand fleuve · ' + r.metric, m[0], m[1], { layer: 'river', name: r.name, metric: r.metric }); }
   for (const r of RANGES) { const m = r.points[Math.floor(r.points.length / 2)]; push(r.name, 'Chaîne de montagnes', m[0], m[1], { layer: 'range', name: r.name, metric: r.metric }); }
+  for (const r of AIR_ROUTES) { const m = midArc(r.a, r.b); push(r.name, 'Route aérienne', m[0], m[1], { layer: 'air', name: r.name, metric: 'Ligne long-courrier' }); }
+  for (const s of SHIPS) push(s.name, 'Navire · ' + s.type, s.lat, s.lng, { layer: 'ship', lat: s.lat, lng: s.lng, name: s.name, type: s.type, metric: s.type + ' · ' + s.metric });
   for (const q of DATA.quakes.slice().sort((a, b) => b.mag - a.mag).slice(0, 25)) push(q.name, 'Séisme M' + fmt1(q.mag), q.lat, q.lng, q);
   SEARCH_INDEX = idx;
 }
@@ -854,8 +881,15 @@ function setMode(m) {
 function setChoro(v) {
   state.choro = v;
   $$('#choroSeg button').forEach(b => b.classList.toggle('on', b.dataset.choro === v));
-  refreshPoly();
+  refreshPoly(true);
   updateLegend();
+}
+
+function zoomBy(f) {
+  if (!world) return;
+  const pov = world.pointOfView();
+  if (!pov) return;
+  world.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: clamp(pov.altitude * f, 0.15, 4) }, 350);
 }
 
 function toggleFollowIss() {
@@ -893,6 +927,16 @@ function buildPanel() {
     world.pointOfView({ lat: +b.dataset.lat, lng: +b.dataset.lng, altitude: +b.dataset.alt }, 1500);
   }));
   $('#btnIss').addEventListener('click', toggleFollowIss);
+  $('#btnZoomIn').addEventListener('click', () => zoomBy(0.65));
+  $('#btnZoomOut').addEventListener('click', () => zoomBy(1.5));
+  $('#btnResetFilters').addEventListener('click', () => {
+    for (const k in state.layers) state.layers[k] = false;
+    $$('#layerList input').forEach(i => { i.checked = false; });
+    setChoro('none');
+    state.followIss = false;
+    $('#btnIss').classList.remove('on');
+    rebuild();
+  });
   $('#btnPlay').addEventListener('click', () => {
     state.autoRotate = !state.autoRotate;
     world.controls().autoRotate = state.autoRotate;

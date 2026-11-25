@@ -296,7 +296,7 @@ const FALLBACK_RC = [
   ['TUN','Tunisie',11933000,163610,'Afrique','Tunis',36.8,10.2,false],
   ['BOL','Bolivie',12389000,1098581,'Amériques','Sucre',-19.0,-65.3,true],
   ['BEL','Belgique',11754000,30528,'Europe','Bruxelles',50.8,4.4,false],
-  ['HT','Haïti',11725000,27750,'Amériques','Port-au-Prince',18.5,-72.3,false],
+  ['HTI','Haïti',11725000,27750,'Amériques','Port-au-Prince',18.5,-72.3,false],
   ['CUB','Cuba',11195000,109884,'Amériques','La Havane',23.1,-82.4,false],
   ['SSD','Soudan du Sud',11470000,619745,'Afrique','Juba',4.9,31.6,false],
   ['DOM','Rép. dominicaine',11332000,48671,'Amériques','Santo Domingo',18.5,-69.9,false],
@@ -329,4 +329,55 @@ const FALLBACK_RC = [
   ['MLT','Malte',535000,316,'Europe','La Valette',35.9,14.4,false],
   ['BRN','Brunei',457000,5765,'Asie','Bandar Seri Begawan',4.9,114.9,false],
   ['BHS','Bahamas',412000,13943,'Amériques','Nassau',25.0,-77.4,false]
+];
+
+const AIR_ROUTES = [
+  { name: 'New York JFK ↔ Paris CDG', a: [40.64,-73.78], b: [49.01,2.55] },
+  { name: 'New York JFK ↔ Los Angeles LAX', a: [40.64,-73.78], b: [33.94,-118.41] },
+  { name: 'Londres LHR ↔ New York JFK', a: [51.47,-0.45], b: [40.64,-73.78] },
+  { name: 'Dubaï DXB ↔ Londres LHR', a: [25.25,55.36], b: [51.47,-0.45] },
+  { name: 'Dubaï DXB ↔ Singapour SIN', a: [25.25,55.36], b: [1.36,103.99] },
+  { name: 'Singapour SIN ↔ Tokyo HND', a: [1.36,103.99], b: [35.55,139.78] },
+  { name: 'Francfort FRA ↔ New York JFK', a: [50.03,8.56], b: [40.64,-73.78] },
+  { name: 'Doha DOH ↔ Sydney SYD', a: [25.26,51.61], b: [-33.95,151.18] },
+  { name: 'Istanbul IST ↔ Dubaï DXB', a: [41.26,28.74], b: [25.25,55.36] },
+  { name: 'Atlanta ATL ↔ Paris CDG', a: [33.64,-84.43], b: [49.01,2.55] },
+  { name: 'Pékin PEK ↔ Francfort FRA', a: [40.08,116.58], b: [50.03,8.56] },
+  { name: 'Tokyo NRT ↔ Los Angeles LAX', a: [35.77,140.39], b: [33.94,-118.41] },
+  { name: 'Sydney SYD ↔ Singapour SIN', a: [-33.95,151.18], b: [1.36,103.99] },
+  { name: 'São Paulo GRU ↔ Miami MIA', a: [-23.44,-46.47], b: [25.79,-80.29] },
+  { name: 'Johannesburg JNB ↔ Dubaï DXB', a: [-26.14,28.25], b: [25.25,55.36] },
+  { name: 'Le Caire CAI ↔ Londres LHR', a: [30.12,31.41], b: [51.47,-0.45] },
+  { name: 'San Francisco SFO ↔ Tokyo NRT', a: [37.62,-122.38], b: [35.77,140.39] },
+  { name: 'Paris CDG ↔ Singapour SIN', a: [49.01,2.55], b: [1.36,103.99] }
+];
+
+const SHIP_COLORS = { 'Porte-conteneurs': '#ffd166', 'Pétrolier': '#ff6b6b', 'Vraquier': '#8d99ae', 'Cargo': '#4cc9f0' };
+
+const SHIPS = [
+  { name: 'Porte-conteneurs — Singapour', lat: 1.3, lng: 103.9, type: 'Porte-conteneurs', metric: '≈ 200 000 EVP' },
+  { name: 'Porte-conteneurs — Shanghai', lat: 31.2, lng: 121.5, type: 'Porte-conteneurs', metric: '≈ 220 000 EVP' },
+  { name: 'Porte-conteneurs — détroit de Malacca', lat: 2.2, lng: 101.8, type: 'Porte-conteneurs', metric: '≈ 180 000 EVP' },
+  { name: 'Pétrolier — détroit d’Ormuz', lat: 26.6, lng: 56.4, type: 'Pétrolier', metric: '≈ 300 000 tpl' },
+  { name: 'Pétrolier — golfe Persique', lat: 27.0, lng: 50.5, type: 'Pétrolier', metric: '≈ 330 000 tpl (VLCC)' },
+  { name: 'Pétrolier — Bab-el-Mandeb', lat: 12.6, lng: 43.4, type: 'Pétrolier', metric: '≈ 280 000 tpl' },
+  { name: 'Porte-conteneurs — canal de Suez', lat: 30.0, lng: 32.5, type: 'Porte-conteneurs', metric: '≈ 170 000 EVP' },
+  { name: 'Porte-conteneurs — canal de Panama', lat: 9.4, lng: -79.9, type: 'Porte-conteneurs', metric: '≈ 160 000 EVP' },
+  { name: 'Porte-conteneurs — Rotterdam', lat: 51.9, lng: 4.5, type: 'Porte-conteneurs', metric: '≈ 150 000 EVP' },
+  { name: 'Cargo — détroit de Gibraltar', lat: 35.9, lng: -5.5, type: 'Cargo', metric: '≈ 60 000 tpl' },
+  { name: 'Cargo — New York', lat: 40.7, lng: -74.0, type: 'Cargo', metric: '≈ 55 000 tpl' },
+  { name: 'Porte-conteneurs — Los Angeles', lat: 33.75, lng: -118.2, type: 'Porte-conteneurs', metric: '≈ 190 000 EVP' },
+  { name: 'Pétrolier — Jebel Ali', lat: 25.0, lng: 55.06, type: 'Pétrolier', metric: '≈ 320 000 tpl' },
+  { name: 'Vraquier — Tokyo', lat: 35.6, lng: 139.8, type: 'Vraquier', metric: '≈ 210 000 tpl' },
+  { name: 'Vraquier — Santos (Brésil)', lat: -23.96, lng: -46.33, type: 'Vraquier', metric: '≈ 200 000 tpl' },
+  { name: 'Cargo — Mumbai', lat: 19.0, lng: 72.8, type: 'Cargo', metric: '≈ 65 000 tpl' },
+  { name: 'Cargo — détroit de la Sonde', lat: -5.9, lng: 105.9, type: 'Cargo', metric: '≈ 70 000 tpl' },
+  { name: 'Cargo — Manche', lat: 49.5, lng: -1.5, type: 'Cargo', metric: '≈ 50 000 tpl' },
+  { name: 'Cargo — Bosphore', lat: 41.05, lng: 29.0, type: 'Cargo', metric: '≈ 45 000 tpl' },
+  { name: 'Cargo — mer du Nord', lat: 56.0, lng: 10.5, type: 'Cargo', metric: '≈ 52 000 tpl' },
+  { name: 'Vraquier — Río de la Plata', lat: -34.9, lng: -55.2, type: 'Vraquier', metric: '≈ 190 000 tpl' },
+  { name: 'Cargo — Atlantique Nord', lat: 45.0, lng: -35.0, type: 'Cargo', metric: '≈ 58 000 tpl' },
+  { name: 'Porte-conteneurs — Le Cap (route du Cap)', lat: -33.93, lng: 18.42, type: 'Porte-conteneurs', metric: '≈ 150 000 EVP' },
+  { name: 'Vraquier — Japon (minerai)', lat: 34.7, lng: 136.9, type: 'Vraquier', metric: '≈ 205 000 tpl' },
+  { name: 'Cargo — Floride', lat: 28.5, lng: -81.3, type: 'Cargo', metric: '≈ 48 000 tpl' }
 ];

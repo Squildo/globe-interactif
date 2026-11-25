@@ -149,7 +149,10 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
   </div>
 
   <div class="mt-2">
-    <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-0.5">Couches cartographiques</div>
+    <div class="flex items-center justify-between mb-0.5">
+      <div class="text-[10px] uppercase tracking-[.14em] text-slate-500">Couches cartographiques</div>
+      <button id="btnResetFilters" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 text-slate-400" title="Désactiver toutes les couches et la choroplèthe">↺ reset filtres</button>
+    </div>
     <div id="layerList"></div>
   </div>
 
@@ -161,6 +164,8 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
       <button class="btn" data-lat="44" data-lng="-33" data-alt="1.05">Câbles transatlantiques</button>
       <button class="btn" data-lat="12" data-lng="-158" data-alt="1.5">🔥 Ceinture de feu du Pacifique</button>
       <button class="btn" id="btnIss" data-iss="1">🛰 Suivre l’ISS</button>
+      <button class="btn" id="btnZoomIn">🔍 Zoom +</button>
+      <button class="btn" id="btnZoomOut">🔍 Zoom −</button>
       <button class="btn" id="btnPlay">⏸ Rotation auto</button>
       <button class="btn col-span-2" id="btnReset">↺ Réinitialiser la vue</button>
     </div>
