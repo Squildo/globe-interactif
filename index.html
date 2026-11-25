@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TerraScope — Globe 3D SIG temps réel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: { ink: '#020409', accent: '#5ea0ff' },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+      }
+    }
+  }
+};
+</script>
+<style>
+:root { color-scheme: dark; }
+html, body { height: 100%; margin: 0; background: #020409; overflow: hidden; }
+body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
+#globe { position: fixed; inset: 0; }
+#globe canvas { display: block; }
+#globe canvas.clickable { cursor: pointer; }
+.glass {
+  background: rgba(10, 15, 28, .72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(130, 170, 255, .14);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+}
+#panel {
+  position: fixed; top: 14px; left: 14px; z-index: 40;
+  width: 326px; max-height: calc(100vh - 28px); overflow-y: auto;
+  padding: 14px; border-radius: 16px;
+  transition: transform .35s ease, opacity .35s ease;
+}
+#panel.collapsed { transform: translateX(-360px); opacity: 0; pointer-events: none; }
+#panel::-webkit-scrollbar, #detail::-webkit-scrollbar, #searchResults::-webkit-scrollbar, #loaderLog::-webkit-scrollbar { width: 8px; }
+#panel::-webkit-scrollbar-thumb, #detail::-webkit-scrollbar-thumb, #searchResults::-webkit-scrollbar-thumb, #loaderLog::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
+#detail {
+  position: fixed; top: 14px; right: 14px; z-index: 40;
+  width: 332px; max-height: calc(100vh - 28px); overflow-y: auto;
+  padding: 14px; border-radius: 16px;
+}
+#issCard { position: fixed; bottom: 14px; right: 14px; z-index: 40; width: 282px; padding: 12px; border-radius: 16px; }
+#legend { position: fixed; bottom: 14px; left: 14px; z-index: 40; max-width: 46vw; padding: 12px; border-radius: 16px; }
+#panelToggle { position: fixed; top: 14px; left: 14px; z-index: 41; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 17px; border-radius: 12px; }
+.seg { display: flex; gap: 4px; background: rgba(255,255,255,.06); padding: 3px; border-radius: 10px; }
+.seg button { flex: 1; padding: 5px 4px; font-size: 11px; border-radius: 8px; color: #94a3b8; white-space: nowrap; transition: .15s; }
+.seg button:hover { color: #e2e8f0; }
+.seg button.on { background: rgba(94,160,255,.24); color: #dbeafe; }
+.btn { font-size: 11px; padding: 6px 8px; border-radius: 9px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cbd5e1; text-align: left; transition: .15s; }
+.btn:hover { background: rgba(94,160,255,.18); color: #eaf2ff; }
+.btn.on { background: rgba(94,160,255,.30); border-color: rgba(94,160,255,.5); color: #fff; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #cbd5e1; background: rgba(255,255,255,.05); padding: 3px 8px; border-radius: 999px; }
+.chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.sw { position: relative; display: inline-block; width: 34px; height: 19px; flex: none; }
+.sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.sw i { position: absolute; inset: 0; background: rgba(255,255,255,.14); border-radius: 999px; transition: .2s; cursor: pointer; }
+.sw i:before { content: ''; position: absolute; width: 13px; height: 13px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.sw input:checked + i { background: #3b82f6; }
+.sw input:checked + i:before { transform: translateX(15px); }
+#netBadge { font-size: 10.5px; padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+#netBadge.live { color: #34d399; background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35); }
+#netBadge.cache { color: #fbbf24; background: rgba(251,191,36,.10); border: 1px solid rgba(251,191,36,.35); }
+.pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 5px; animation: pl 1.4s ease infinite; vertical-align: 1px; }
+@keyframes pl { 50% { opacity: .25; } }
+#tooltip {
+  position: fixed; z-index: 70; pointer-events: none; max-width: 270px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(8, 12, 24, .93); border: 1px solid rgba(130,170,255,.28);
+  box-shadow: 0 8px 24px rgba(0,0,0,.55); font-size: 12px;
+}
+#tooltip b { display: block; color: #fff; font-size: 12.5px; margin-top: 1px; }
+#tooltip span { color: #7dd3fc; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+#tooltip em { display: block; color: #e2e8f0; font-style: normal; font-size: 11.5px; margin-top: 2px; }
+.iss-label {
+  position: fixed; z-index: 60; pointer-events: none; display: none;
+  transform: translate(-50%, -170%);
+  font: 600 10.5px/1 ui-monospace, Menlo, monospace; letter-spacing: .08em;
+  color: #7dd3fc; background: rgba(8,15,30,.78);
+  border: 1px solid rgba(125,211,252,.45); padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+}
+#loader {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(1200px 620px at 50% 30%, #0b1226 0%, #020409 72%);
+  transition: opacity .6s ease;
+}
+#loader.done { opacity: 0; pointer-events: none; }
+.spin { width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgba(94,160,255,.2); border-top-color: #5ea0ff; animation: sp 1s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+#loaderLog { width: min(440px, 82vw); max-height: 38vh; overflow: auto; font: 12px/1.75 ui-monospace, Menlo, monospace; color: #94a3b8; }
+</style>
+</head>
+<body class="bg-ink text-slate-200 overflow-hidden">
+
+<div id="globe"></div>
+
+<button id="panelToggle" class="glass hidden" title="Ouvrir le panneau de contrôle">☰</button>
+
+<aside id="panel" class="glass">
+  <div class="flex items-center gap-2">
+    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-indigo-600 flex items-center justify-center text-lg shrink-0">🌐</div>
+    <div class="flex-1 min-w-0">
+      <h1 class="text-[15px] font-bold leading-none tracking-tight">TerraScope</h1>
+      <div class="text-[10px] text-slate-400 mt-0.5">Globe 3D SIG · centre de contrôle</div>
+    </div>
+    <span id="netBadge" class="live" title=""><span class="pulse"></span>…</span>
+    <button id="panelClose" class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 shrink-0" title="Replier le panneau">‹</button>
+  </div>
+
+  <div id="searchBox" class="relative mt-3">
+    <input id="search" type="text" autocomplete="off" placeholder="Rechercher pays, ville, port, câble, fosse…"
+      class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[12.5px] placeholder:text-slate-500 focus:outline-none focus:border-sky-400/50">
+    <div id="searchResults" class="hidden absolute left-0 right-0 top-full mt-1 glass rounded-xl p-1 z-50 max-h-64 overflow-y-auto"></div>
+  </div>
+
+  <div class="mt-3">
+    <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1">Mode visuel</div>
+    <div id="modeSeg" class="seg">
+      <button data-mode="satellite" class="on">🛰 Satellite</button>
+      <button data-mode="night">🌃 Nuit</button>
+      <button data-mode="topo">⛰ Relief</button>
+    </div>
+  </div>
+
+  <div class="mt-2.5">
+    <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1">Choroplèthe pays</div>
+    <div id="choroSeg" class="seg">
+      <button data-choro="none" class="on">Aucun</button>
+      <button data-choro="pop">Population</button>
+      <button data-choro="gdp">PIB</button>
+    </div>
+  </div>
+
+  <div class="mt-2">
+    <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-0.5">Couches cartographiques</div>
+    <div id="layerList"></div>
+  </div>
+
+  <div class="mt-3">
+    <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1">Vues prédéfinies & animation</div>
+    <div id="presets" class="grid grid-cols-2 gap-1.5">
+      <button class="btn" data-lat="24" data-lng="8" data-alt="2.4">🌍 Vue globale</button>
+      <button class="btn" data-lat="7" data-lng="108" data-alt="0.85">Détroits &amp; commerce Asie</button>
+      <button class="btn" data-lat="44" data-lng="-33" data-alt="1.05">Câbles transatlantiques</button>
+      <button class="btn" data-lat="12" data-lng="-158" data-alt="1.5">🔥 Ceinture de feu du Pacifique</button>
+      <button class="btn" id="btnIss" data-iss="1">🛰 Suivre l’ISS</button>
+      <button class="btn" id="btnPlay">⏸ Rotation auto</button>
+      <button class="btn col-span-2" id="btnReset">↺ Réinitialiser la vue</button>
+    </div>
+  </div>
+
+  <div class="mt-3 text-[10px] leading-relaxed text-slate-500">
+    Survol : infobulle · Clic sur un objet : fiche détaillée · Clic sur le globe : sonde météo/océan Open-Meteo en direct.
+  </div>
+</aside>
+
+<aside id="detail" class="glass hidden">
+  <div id="detailCard" data-card class="mb-3"></div>
+  <div id="probeCard" data-card></div>
+</aside>
+
+<div id="issCard" class="glass hidden"></div>
+<div id="legend" class="glass hidden"></div>
+<div id="tooltip" class="hidden"></div>
+
+<div id="loader">
+  <div class="spin"></div>
+  <div class="text-sm font-semibold tracking-wide text-slate-200">TerraScope — chargement du globe…</div>
+  <div id="loaderLog"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three"></script>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
