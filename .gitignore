@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+artifacts/
+*.tsbuildinfo
+
+# Import local : provenance ou obligations de redistribution à confirmer.
+/data/night.jpg
+/data/topology.png
+/data/moon.jpg
+/data/landings.json
+/data/volcanoes.geojson
+/data/airports.csv
+/data/routes.csv
