@@ -11,7 +11,9 @@ TerraScope est un atlas interactif en français : explorer la Terre pour compren
 
 ## Architecture
 
-Node 24 et npm ; React + TypeScript + Vite + `react-globe.gl`. `src/` contient l’interface, `data/` les fichiers réutilisables, `server/` les adaptateurs (montés dans Vite en développement et prévisualisation). Pas de compte, pas de base de données, pas de diffusion publique par défaut. `.env` est local, `.env.example` est un gabarit sans secrets.
+Node 24 et npm ; React + TypeScript + Vite + `react-globe.gl`. `src/` contient l’interface et la normalisation des flux publics, `data/` les fichiers cartographiques et `server/` les adaptateurs locaux (montés dans Vite en développement et prévisualisation). Pas de compte ni de base de données. `.env` est local, `.env.example` est un gabarit sans secrets.
+
+L’[édition GitHub Pages](docs/decisions/002-edition-pages.md) publie uniquement une compilation statique et ses données redistribuables. Les flux accessibles sans clé sont lus dans le navigateur ; l’API, les options avec clés et les jeux dont la redistribution reste à vérifier sont propres à l’édition locale.
 
 ## Critères d’acceptation
 

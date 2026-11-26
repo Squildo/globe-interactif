@@ -49,19 +49,20 @@ export function LayerPanel({ atlas, data, change, visibleOrbits, onSatellite, on
         return <section key={group.id} className="layer-group"><h3><button aria-expanded={open} aria-controls={`group-${group.id}`} onClick={() => setClosed(previous => open ? [...previous, group.id] : previous.filter(id => id !== group.id))}><span><b>{group.index}</b> {group.name}</span><ChevronDown size={15} className={open ? '' : 'closed-chevron'} /></button></h3>
           <div id={`group-${group.id}`} hidden={!open}>{items.map(layer => {
             const Icon = icons[layer.id], enabled = atlas.active.includes(layer.id), expanded = info.includes(layer.id);
-            const feed = getFeed(layer.id, data), filters = options(layer, atlas, change);
+            const feed = getFeed(layer.id, data), filters = layer.restriction ? null : options(layer, atlas, change);
             const error = data.errors[layer.id as keyof typeof data.errors];
             return <div key={layer.id} className={`layer ${enabled ? 'enabled' : ''}`}>
               <div className="layer-row">
                 <button className="layer-name" aria-expanded={expanded} aria-controls={`layer-info-${layer.id}`} onClick={() => setInfo(old => old.includes(layer.id) ? old.filter(id => id !== layer.id) : [...old, layer.id])}>
-                  <span className="layer-icon" style={{ color: layer.color }}><Icon size={15} strokeWidth={1.8} /></span><span><strong>{layer.title}</strong><small>{layer.blocked ? 'Source à valider' : enabled && feed ? labels[feed.status] : error ? 'Indisponible' : `${layer.source}${enabled && data.counts[layer.id] ? ` · ${data.counts[layer.id]!.toLocaleString('fr-FR')}` : ''}`}</small></span>
+                  <span className="layer-icon" style={{ color: layer.color }}><Icon size={15} strokeWidth={1.8} /></span><span><strong>{layer.title}</strong><small>{layer.restriction ? (layer.id === 'cables' ? 'Source à valider' : 'Édition locale') : enabled && feed ? labels[feed.status] : error ? 'Indisponible' : `${layer.source}${enabled && data.counts[layer.id] ? ` · ${data.counts[layer.id]!.toLocaleString('fr-FR')}` : ''}`}</small></span>
                 </button>
-                <button className="switch-hit" role="switch" type="button" aria-label={layer.title} aria-checked={enabled} disabled={layer.blocked}
+                <button className="switch-hit" role="switch" type="button" aria-label={layer.title} aria-checked={enabled} disabled={Boolean(layer.restriction)}
                   onClick={() => { change({ type: 'layer', id: layer.id, enabled: !enabled }); if (!enabled && (feed || layer.id === 'population')) setInfo(old => old.includes(layer.id) ? old : [...old, layer.id]); }}><span className="switch-track" /></button>
               </div>
               <div className="layer-info" id={`layer-info-${layer.id}`} hidden={!expanded}>
                 <p><strong>{layer.kind}</strong> — {layer.description}</p>
                 <a href={layer.url} target="_blank" rel="noreferrer">{layer.source} ↗</a>
+                {layer.restriction && layer.id !== 'cables' && <p>{layer.restriction}</p>}
                 {enabled && feed && <p role="status">{labels[feed.status]}{feed.updatedAt ? ` · ${formatTime(feed.updatedAt)}` : ''}{feed.note ? ` — ${feed.note}` : ''}</p>}
                 {enabled && layer.id === 'satellites' && atlas.body === 'earth' && orbits.length > 0 && <>
                   <p>{visibleOrbits > 0 ? `${visibleOrbits} sur ${orbits.length} visible${visibleOrbits === 1 ? '' : 's'} dans cette vue.` : `${orbits.length} position${orbits.length === 1 ? '' : 's'} calculée${orbits.length === 1 ? '' : 's'}, hors de vue. Fais tourner le globe.`}</p>
@@ -75,6 +76,6 @@ export function LayerPanel({ atlas, data, change, visibleOrbits, onSatellite, on
         </section>;
       })}
     </div>
-    <button className="sidebar-foot" onClick={onSources}><CircleHelp size={16} /> Sources et crédits <span>↗</span></button>
+    <button className="sidebar-foot" onClick={onSources}><CircleHelp size={16} /> Sources et crédits <span aria-hidden="true">↗</span></button>
   </aside>;
 }

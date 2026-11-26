@@ -54,3 +54,8 @@ test('passer de la Terre à la Lune et revenir ne masque pas les couches terrest
   assert.equal(earth.body, 'earth');
   assert.ok(earth.active.includes('cities'));
 });
+
+test('l’édition Web peut ouvrir la Lune sans activer les sites historiques', () => {
+  assert.deepEqual(parseCommand('Passe à la Lune', false), [{ type: 'body', value: 'moon' }]);
+  assert.deepEqual(parseCommand('Affiche les sites d’alunissage', false), [{ type: 'layer', id: 'moon-landings', enabled: true }]);
+});

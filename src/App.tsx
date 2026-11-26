@@ -3,18 +3,20 @@ import { ArrowUpRight, BookOpen, ChevronRight, Globe2, Layers3, MapPin, Moon, Ro
 import { applyActions, defaultAtlas, regions, type Action, type Atlas } from './atlas';
 import { BaseControls, CameraBadge, DetailCard, Legend, Navigation, PlaceSearch } from './AtlasTools';
 import { Assistant } from './Assistant';
-import { catalog } from './catalog';
+import { catalog, checkAvailability } from './catalog';
 import { searchPlaces, useAtlasData } from './data';
+import { isPages, isStyleAvailable } from './edition';
 import { LayerPanel } from './LayerPanel';
 import type { CameraCommand, Selection } from './GlobeView';
 import type { Mark, Place } from './models';
+import mark from './mark.svg';
 
 const GlobeView = lazy(() => import('./GlobeView'));
 const initialCamera = { lat: 24, lng: 11, altitude: 2.02 };
 const initialAtlas = (): Atlas => {
   try {
     const value = localStorage.getItem('terrascope-style');
-    return value === 'night' || value === 'relief' ? { ...defaultAtlas, style: value } : defaultAtlas;
+    return (value === 'night' || value === 'relief') && isStyleAvailable(value) ? { ...defaultAtlas, style: value } : defaultAtlas;
   } catch { return defaultAtlas; }
 };
 
@@ -45,6 +47,7 @@ export default function App() {
     if (matchMedia('(max-width: 860px)').matches) setPanel(false);
   };
   const change = (action: Action) => {
+    if (checkAvailability([action])) return;
     const next = applyActions(atlas, [action]);
     setAtlas(next); setUndo(undefined);
     if (action.type === 'style' || action.type === 'reset') try { localStorage.setItem('terrascope-style', next.style); } catch { /* storage unavailable */ }
@@ -55,6 +58,8 @@ export default function App() {
     }
   };
   const apply = (actions: Action[]) => {
+    const restriction = checkAvailability(actions);
+    if (restriction) return `${restriction} Aucun changement appliqué.`;
     const placeActions = actions.flatMap(action => action.type === 'focus' ? [action] : []);
     const resolved = placeActions.map(a => ({ a, match: searchPlaces(data.places, a.place, 1)[0] }));
     const unknown = resolved.find(result => !result.match);
@@ -79,7 +84,7 @@ export default function App() {
 
   return <div className="shell">
     <header className="topbar">
-      <div className="branding"><img src="/mark.svg" alt="" width="40" height="40" /><div><strong>TerraScope<span>.</span></strong><small>ATLAS INTERACTIF</small></div></div>
+      <div className="branding"><img src={mark} alt="" width="40" height="40" /><div><strong>TerraScope<span>.</span></strong><small>ATLAS INTERACTIF</small></div></div>
       <div className="breadcrumbs"><Globe2 size={15} /><span>Atlas</span><ChevronRight size={13} /><strong>{atlas.body === 'earth' ? 'Globe terrestre' : 'Globe lunaire'}</strong></div>
       <div className={`top-search ${showSearch ? 'search-open' : ''}`}><PlaceSearch places={data.places} onPick={place => { if (atlas.body !== 'earth') setAtlas(applyActions(atlas, [{ type: 'body', value: 'earth' }])); focus(place); }} /></div>
       <button className="mobile-search icon-button" aria-label="Ouvrir la recherche géographique" aria-expanded={showSearch} onClick={() => setShowSearch(!showSearch)}><MapPin size={18} /></button>
@@ -91,9 +96,9 @@ export default function App() {
         <div className="map-grid" aria-hidden="true" />
         <Suspense fallback={<div className="globe-fallback" role="status">Chargement du moteur 3D…</div>}><GlobeView atlas={atlas} data={data} camera={camera} command={command} spinning={spinning} onCamera={setCamera} onOrbitVisibility={setVisibleOrbits} onSelect={select} /></Suspense>
         <div className="map-toolbar"><BaseControls atlas={atlas} change={change} panel={panel} onPanel={() => { setPanel(true); setAssist(false); }} />
-          <div className="world-controls"><button className="tool-button body-button" onClick={() => change(atlas.body === 'earth' ? { type: 'layer', id: 'moon-landings', enabled: true } : { type: 'body', value: 'earth' })}>{atlas.body === 'earth' ? <Moon size={16} /> : <Globe2 size={16} />} {atlas.body === 'earth' ? 'Lune' : 'Terre'}</button><button className="tool-button reset-button" onClick={() => change({ type: 'reset' })} title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><RotateCcw size={16} /></button></div>
+          <div className="world-controls"><button className="tool-button body-button" onClick={() => change(atlas.body === 'moon' ? { type: 'body', value: 'earth' } : isPages ? { type: 'body', value: 'moon' } : { type: 'layer', id: 'moon-landings', enabled: true })}>{atlas.body === 'earth' ? <Moon size={16} /> : <Globe2 size={16} />} {atlas.body === 'earth' ? 'Lune' : 'Terre'}</button><button className="tool-button reset-button" onClick={() => change({ type: 'reset' })} title="Réinitialiser les filtres" aria-label="Réinitialiser les filtres"><RotateCcw size={16} /></button></div>
         </div>
-        <div className="map-heading"><div><i /> {atlas.body === 'earth' ? 'TERRE / 01' : 'LUNE / 02'} <span>·</span> {focusName ? `FOCUS : ${focusName}` : 'VUE GLOBALE'}</div><h1>{atlas.body === 'earth' ? 'Globe terrestre' : 'Globe lunaire'}</h1><p>{atlas.body === 'earth' ? 'Géographies, phénomènes et flux du monde.' : 'Explore les sites historiques d’alunissage.'}</p></div>
+        <div className="map-heading"><div><i /> {atlas.body === 'earth' ? 'TERRE / 01' : 'LUNE / 02'} <span>·</span> {focusName ? `FOCUS : ${focusName}` : 'VUE GLOBALE'}</div><h1>{atlas.body === 'earth' ? 'Globe terrestre' : 'Globe lunaire'}</h1><p>{atlas.body === 'earth' ? 'Géographies, phénomènes et flux du monde.' : isPages ? 'Explore la surface lunaire.' : 'Explore les sites historiques d’alunissage.'}</p></div>
         <Navigation spinning={spinning} onSpin={() => setSpinning(!spinning)} onCamera={navigate} />
         <Legend atlas={atlas} change={change} />
         <button className="stage-credit" onClick={() => sources.current?.showModal()}>Globe.gl <span>·</span> Crédits <ArrowUpRight size={12} /></button>
@@ -101,11 +106,13 @@ export default function App() {
         {assist && <Assistant onClose={closeAssistant} onApply={apply} onUndo={undoCommand} canUndo={Boolean(undo)} />}
       </section>
     </main>
-    <footer className="statusbar"><span className="status-brand"><span className="status-dot" /> Atlas local</span><span className="status-count"><Layers3 size={13} /> {activeCount} couche{activeCount !== 1 ? 's' : ''} visible{activeCount !== 1 ? 's' : ''}</span><span className="status-chrome">MODÈLE SPHÉRIQUE <b>·</b> WGS84</span><CameraBadge {...camera} moon={atlas.body === 'moon'} /></footer>
+    <footer className="statusbar"><span className="status-brand"><span className="status-dot" /> {isPages ? 'Atlas web' : 'Atlas local'}</span><span className="status-count"><Layers3 size={13} /> {activeCount} couche{activeCount !== 1 ? 's' : ''} visible{activeCount !== 1 ? 's' : ''}</span><span className="status-chrome">MODÈLE SPHÉRIQUE <b>·</b> WGS84</span><CameraBadge {...camera} moon={atlas.body === 'moon'} /></footer>
     <dialog className="sources" ref={sources} aria-labelledby="sources-title">
       <header><span><BookOpen size={18} /> Registre</span><form method="dialog"><button className="icon-button" aria-label="Fermer les sources"><X size={20} /></button></form></header>
       <h2 id="sources-title">Sources et crédits</h2><p>Les couches ne sont pas toujours exhaustives. Les estimations, données historiques et flux actualisés sont distingués dans le catalogue. Cet atlas n’est pas destiné à la navigation.</p>
-      <ul>{catalog.map(layer => <li key={layer.id}><strong>{layer.title}</strong><a href={layer.url} target="_blank" rel="noreferrer">{layer.source} <ArrowUpRight size={13} /></a><small>{layer.description}</small></li>)}</ul><p>Fonds : textures des exemples Globe.gl / three-globe ; Blue Marble, NASA (Terre). Rendu : Globe.gl / Three.js.</p>
+      <ul>{catalog.map(layer => <li key={layer.id}><strong>{layer.title}</strong><a href={layer.url} target="_blank" rel="noreferrer">{layer.source} <ArrowUpRight size={13} /></a><small>{layer.description} {layer.id !== 'cables' && layer.restriction}</small></li>)}</ul>
+      {isPages ? <p>Fonds : <a href="https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/">Blue Marble</a> (NASA GSFC, Reto Stöckli et Robert Simmon), <a href="https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/">Black Marble 2016</a> (NASA Earth Observatory, Joshua Stevens ; données VIIRS de Miguel Román) et <a href="https://svs.gsfc.nasa.gov/4720/">CGI Moon Kit</a> (NASA Scientific Visualization Studio, Ernie Wright). Nuages : Tom Patterson, Natural Earth III. Le relief est réservé à l’édition locale. Rendu : Globe.gl / Three.js. <a href={`${import.meta.env.BASE_URL}licenses.md`}>Licences des bibliothèques</a>.</p>
+        : <p>Fonds : textures des exemples Globe.gl / three-globe ; Blue Marble, NASA (Terre). Rendu : Globe.gl / Three.js.</p>}
     </dialog>
   </div>;
 }

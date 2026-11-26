@@ -3,6 +3,7 @@ import { ArrowUpRight, BriefcaseBusiness, Compass, Crosshair, Grid3X3, Layers3, 
 import { type Action, type Atlas, type LayerId, type Style } from './atlas';
 import { catalog, getLayer } from './catalog';
 import { searchPlaces } from './data';
+import { isStyleAvailable } from './edition';
 import { formatTime } from './LayerPanel';
 import type { CameraCommand, Selection } from './GlobeView';
 import type { Place } from './models';
@@ -33,7 +34,7 @@ const looks = [{ id: 'satellite', name: 'Satellite', icon: Sun }, { id: 'night',
 export function BaseControls({ atlas, change, panel, onPanel }: { atlas: Atlas; change: (a: Action) => void; panel: boolean; onPanel: () => void }) {
   return <div className="map-tools">
     {!panel && <button className="tool-button" onClick={onPanel} aria-controls="layer-panel" aria-expanded={false}><Layers3 size={17} /><span>Couches</span></button>}
-    {atlas.body === 'earth' && <div className="map-segments" aria-label="Fond du globe">{looks.map(({ id, name, icon: Icon }) => <button key={id} className={atlas.style === id ? 'map-chosen' : ''} aria-pressed={atlas.style === id} aria-label={`Fond ${name.toLowerCase()}`} onClick={() => change({ type: 'style', value: id })}><Icon size={16} /><span>{name}</span></button>)}</div>}
+    {atlas.body === 'earth' && <div className="map-segments" aria-label="Fond du globe">{looks.map(({ id, name, icon: Icon }) => <button key={id} className={atlas.style === id ? 'map-chosen' : ''} aria-pressed={atlas.style === id} aria-label={`Fond ${name.toLowerCase()}`} disabled={!isStyleAvailable(id)} title={!isStyleAvailable(id) ? 'Réservé à l’édition locale' : undefined} onClick={() => change({ type: 'style', value: id })}><Icon size={16} /><span>{name}</span></button>)}</div>}
     <button type="button" className="tool-button grid-button" aria-label="Grille géographique" aria-pressed={atlas.graticules} title="Grille géographique" onClick={() => change({ type: 'grid', value: !atlas.graticules })}><Grid3X3 size={17} /></button>
   </div>;
 }

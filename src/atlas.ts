@@ -82,7 +82,7 @@ const terms: [LayerId, RegExp][] = [
   ['moon-landings', /alunissage|mission[s]? lunaire/],
 ];
 
-export function parseCommand(text: string): Action[] {
+export function parseCommand(text: string, includeMoonLandings = true): Action[] {
   const clauses = text.trim().split(/\s+(?:et\s+)?(?=(?:affiche|active|cache|masque|d[ée]sactive|montre|centre|zoome|passe|reviens|r[ée]initialise)\b)/iu);
   const actions: Action[] = [];
   for (const clause of clauses) {
@@ -96,7 +96,7 @@ export function parseCommand(text: string): Action[] {
       actions.push({ type: 'focus', place }); continue;
     }
     if (/\blune\b/.test(line) && (/^(passe|reviens)\b/.test(line) || place && normalize(place) === 'lune' || !terms.some(([, pattern]) => pattern.test(line)))) {
-      actions.push(enabled ? { type: 'layer', id: 'moon-landings', enabled: true } : { type: 'body', value: 'earth' }); continue;
+      actions.push(!enabled ? { type: 'body', value: 'earth' } : includeMoonLandings ? { type: 'layer', id: 'moon-landings', enabled: true } : { type: 'body', value: 'moon' }); continue;
     }
     if (/^(passe|reviens)\b/.test(line) && /\bterre\b/.test(line)) { actions.push({ type: 'body', value: 'earth' }); continue; }
 

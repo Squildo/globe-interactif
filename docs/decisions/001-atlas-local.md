@@ -1,5 +1,7 @@
 # ADR 001 — Garder TerraScope local en V1
 
+Cette décision décrit le périmètre initial. Voir l’[ADR 002](002-edition-pages.md) pour l’édition web et le [README](../../README.md#options-locales-dans-env) pour la configuration de Gemini, qui a remplacé OpenAI en local.
+
 **Décision acceptée — 2026-11-26.** Intégrer Globe.gl via `react-globe.gl` et utiliser Vite pour servir le client. Monter la même API locale dans Vite en développement et en prévisualisation : elle normalise, limite et met en cache les appels fournisseurs. Les clés et la connexion WebSocket AIS restent côté serveur. L’assistant local convertit les commandes en actions typées ; Gemini est un interprète optionnel via son API native, jamais un exécutant.
 
 Un fork de Globe.gl augmenterait la maintenance alors que ses surcouches rendent déjà les géométries nécessaires. Des appels directs depuis le navigateur exposeraient les identifiants ou dépendraient des politiques CORS de chaque source. Un serveur public distinct impliquerait authentification, quotas par utilisateur, gestion de secrets, conformité des sources et surveillance : hors périmètre V1.

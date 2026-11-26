@@ -12,14 +12,16 @@ Lire d’abord [CONTEXTE.md](CONTEXTE.md). Voir [le registre des sources](docs/s
 - [x] Rétablir les repères orbitaux cliquables et le recentrage « Voir l’ISS » (ou « Voir un satellite »). L’occlusion par la Terre reste active.
 - [x] Ajouter la sphère de nuages de l’exemple officiel Globe.gl avec un masque local « Fair Weather » de Natural Earth III. C’est une illustration, pas un flux de météo.
 - [ ] Tester AISStream et Gemini avec des identifiants dans `.env`. Les échanges sont couverts par simulation, pas par un test authentifié. En local, `/api/config` indique `assistant: false` : aucune clé Gemini n’a été détectée.
-- [ ] Avant redistribution, lever les réserves du registre. Les câbles restent désactivés ; si une couverture européenne ou un rendu régional agrégé convient, réévaluer EMODnet.
+- [ ] Lever les réserves du registre avant de publier des couches supplémentaires. Les câbles restent désactivés ; si une couverture européenne ou un rendu régional agrégé convient, réévaluer EMODnet.
+- [x] Préparer l’édition statique avec les fonds Nuit et Lune crédités et les flux publics directs. L’API locale et les sources non redistribuables sont exclues de `dist-pages/`.
+- [x] Remplacer `live-data` sur `main` par un workflow qui teste, compile et publie uniquement `dist-pages/`. L’ancien code et son workflow sont conservés sur `mistral-large-4-work`.
 
 ## Vérifications du 26 novembre 2026
 
-- `npm test` : 18 tests passés. `npm run build` passe ; avertissements non bloquants du bundler pour le module 3D (~573 ko gzip) et les directives Lucide.
+- `npm test` : 21 tests passés. `npm run build` et `npm run build:pages` passent. Vite signale la taille du module 3D et l’analyse du worker WASM de `satellite.js` ; ce worker n’est pas inclus dans le build Pages.
 - `npm run test:browser` : réussi sur le serveur de développement et le build prévisualisé, avec Chromium et WebGL 2 (SwiftShader). Le parcours couvre le survol et sa disparition à la sortie, les nuages (chargement, rendu, dérive sans rotation de la caméra, arrêt au masquage et en mouvement réduit, visibilité d’onglet simulée), les orbites, l’assistant avec confirmation, la recherche, Terre/Lune et les contrôles tactiles. Captures jour/nuit sur ordinateur et iPhone 13 émulé dans `artifacts/`, ignoré par Git. Les séismes, satellites et réponses Gemini y sont simulés.
 - `/api/satellites` réel : HTTP `200`, état `fresh`, cinq positions dont l’ISS. Une couche active sans repère visible peut simplement indiquer que les satellites sont derrière la Terre. L’API distingue ce cas d’un flux indisponible.
 - Le `502` et l’erreur de fermeture du canal de messagerie n’ont pas été reproduits dans le Chromium de test sans extensions. Si le `502` revient, relever séparément l’URL de la requête en échec dans Réseau et la source du message de console ; aucun lien avec les satellites n’est établi.
-- `npm audit` : aucune vulnérabilité signalée. Le dépôt source ne déploie pas l’application ; les données dont les conditions de redistribution restent à vérifier sont importées localement.
+- `npm audit` : aucune vulnérabilité signalée. Le workflow de publication ne lance pas le script d’import local.
 
-Pour reprendre : [README](README.md) pour lancer le projet, `server/` pour les flux et `src/atlas.ts` pour les actions de l’assistant. Vérifier `git status` avant toute opération de versionnement ou de publication.
+Pour reprendre : [README](README.md) pour lancer ou publier le projet, `src/science.ts` pour les flux partagés, `server/` pour l’API locale et `src/atlas.ts` pour les actions de l’assistant. Vérifier `git status` avant toute opération de versionnement ou de publication.

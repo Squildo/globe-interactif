@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowUp, Check, CornerUpLeft, Sparkles, X } from 'lucide-react';
 import { parseCommand, validateActions, type Action } from './atlas';
-import { getLayer } from './catalog';
+import { checkAvailability, getLayer } from './catalog';
+import { isPages } from './edition';
 
 const examples = ['Affiche les séismes de magnitude 5 au Japon', 'Masque les villes', 'Passe en mode nuit'];
 const descriptions: Record<string, string> = { satellite: 'satellite', night: 'nuit', relief: 'relief', borders: 'frontières', population: 'population', gdp: 'PIB', hex: 'maillage hexagonal', moon: 'Lune', earth: 'Terre', heat: 'carte de chaleur', columns: 'colonnes', points: 'points', europe: 'Europe occidentale', atlantic: 'Manche orientale', japan: 'Japon', west: 'Côte est américaine' };
@@ -25,16 +26,16 @@ export function Assistant({ onClose, onApply, onUndo, canUndo }: { onClose: () =
   useEffect(() => {
     const controller = new AbortController();
     field.current?.focus();
-    fetch('/api/config', { signal: controller.signal }).then(r => r.json()).then(config => setEnabled(config.assistant === true)).catch(() => {});
+    if (!isPages) fetch('/api/config', { signal: controller.signal }).then(r => r.json()).then(config => setEnabled(config.assistant === true)).catch(() => {});
     return () => { controller.abort(); request.current?.abort(); };
   }, []);
   useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; }, [busy, messages]);
   const send = async (value: string) => {
     const text = value.trim(); if (!text || busy) return;
     setInput(''); setMessages(old => [...old, { role: 'user', text }]);
-    let actions = parseCommand(text);
-    let reply = actions.length ? 'Voici les changements à appliquer.' : 'Je ne reconnais pas cette commande. Essaie « Montre les volcans » ou « Centre sur Paris ».';
-    if (!actions.length && enabled && allowAI) {
+    let actions = parseCommand(text, !getLayer('moon-landings').restriction);
+    let reply = actions.length ? 'Voici les changements à appliquer.' : 'Je ne reconnais pas cette commande. Essaie « Affiche les nuages » ou « Centre sur Paris ».';
+    if (!isPages && !actions.length && enabled && allowAI) {
       setBusy(true); request.current = new AbortController();
       try {
         const res = await fetch('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }), signal: AbortSignal.any([request.current.signal, AbortSignal.timeout(18_000)]) });
@@ -48,6 +49,8 @@ export function Assistant({ onClose, onApply, onUndo, canUndo }: { onClose: () =
       } catch { if (request.current.signal.aborted) return; reply = 'Gemini n’a pas répondu. Les commandes locales restent disponibles.'; }
       finally { if (!request.current.signal.aborted) setBusy(false); }
     }
+    const restriction = checkAvailability(actions);
+    if (restriction) { reply = `${restriction} Aucun changement proposé.`; actions = []; }
     setMessages(old => [...old, { role: 'assistant', text: reply, actions }]);
   };
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
@@ -66,7 +69,8 @@ export function Assistant({ onClose, onApply, onUndo, canUndo }: { onClose: () =
     <div className="assistant-footer">
       {canUndo && <button className="undo" onClick={onUndo}><CornerUpLeft size={14} /> Annuler la dernière commande</button>}
       {enabled && <label className="opt-ai"><input type="checkbox" checked={allowAI} onChange={e => setAllowAI(e.target.checked)} /> Envoyer à Gemini si la commande n’est pas reconnue</label>}
-      <form onSubmit={submit} className="assistant-form"><input ref={field} maxLength={600} aria-label="Message à l’assistant" value={input} onChange={e => setInput(e.target.value)} placeholder="Ex. Montre les volcans…" /><button type="submit" disabled={!input.trim() || busy} aria-label="Envoyer à l’assistant"><ArrowUp size={19} /></button></form>
+      {isPages && <small className="opt-ai">Commandes locales uniquement · Gemini nécessite l’édition locale.</small>}
+      <form onSubmit={submit} className="assistant-form"><input ref={field} maxLength={600} aria-label="Message à l’assistant" value={input} onChange={e => setInput(e.target.value)} placeholder="Ex. Affiche les nuages…" /><button type="submit" disabled={!input.trim() || busy} aria-label="Envoyer à l’assistant"><ArrowUp size={19} /></button></form>
     </div>
   </section>;
 }

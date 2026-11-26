@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
+import { editionAssets } from '#edition-assets';
 import { normalize, type Atlas, type LayerId } from './atlas';
+import { getLayer } from './catalog';
+import { isPages } from './edition';
+import { live, type FeedLoader } from './live';
 import type { Area, Feed, Mark, Place, Route } from './models';
 import { list, object, parseAirports, parseAreas, parsePlaces, parseRoutes, number, text } from './parsers';
 
 export const textures = {
-  earth: new URL('../data/earth.jpg', import.meta.url).href, night: new URL('../data/night.jpg', import.meta.url).href,
-  relief: new URL('../data/topology.png', import.meta.url).href, moon: new URL('../data/moon.jpg', import.meta.url).href,
+  earth: new URL('../data/earth.jpg', import.meta.url).href,
+  night: editionAssets.night, relief: editionAssets.relief, moon: editionAssets.moon,
   clouds: new URL('../data/clouds.jpg', import.meta.url).href,
 };
 const files = {
   countries: new URL('../data/countries.geojson', import.meta.url).href, cities: new URL('../data/cities.geojson', import.meta.url).href,
-  volcanoes: new URL('../data/volcanoes.geojson', import.meta.url).href, landings: new URL('../data/landings.json', import.meta.url).href,
-  airports: new URL('../data/airports.csv', import.meta.url).href, routes: new URL('../data/routes.csv', import.meta.url).href,
+  volcanoes: editionAssets.volcanoes, landings: editionAssets.landings, airports: editionAssets.airports, routes: editionAssets.routes,
 };
-const load = (url: string) => fetch(url).then(response => { if (!response.ok) throw Error('Source indisponible'); return response; });
+async function load(url: string | null) {
+  if (!url) throw Error('Source réservée à l’édition locale');
+  const response = await fetch(url);
+  if (!response.ok) throw Error('Source indisponible');
+  return response;
+}
 const readers = {
   countries: () => load(files.countries).then(r => r.json()).then(parseAreas),
   cities: () => load(files.cities).then(r => r.json()).then(v => parsePlaces(v)),
@@ -45,10 +53,10 @@ function useStatic<K extends keyof Reads>(key: K, enabled = true): [Reads[K], bo
 }
 
 const pending: Feed = { status: 'loading', items: EMPTY, updatedAt: null };
-function useFeed(url: string, enabled: boolean, interval: number): Feed {
-  const [current, set] = useState<{ url: string; feed: Feed }>();
+function useFeed(load: FeedLoader | undefined, enabled: boolean, interval: number): Feed {
+  const [current, set] = useState<{ load: FeedLoader; feed: Feed }>();
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !load) return;
     let valid = true;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -56,34 +64,35 @@ function useFeed(url: string, enabled: boolean, interval: number): Feed {
       if (document.visibilityState === 'hidden') { timer = setTimeout(refresh, interval); return; }
       controller = new AbortController();
       try {
-        const res = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(16_000)]) });
-        if (!res.ok) throw Error('Flux indisponible');
-        const feed: Feed = await res.json();
-        if (valid) set({ url, feed });
+        const feed = await load(controller.signal);
+        if (valid) set({ load, feed });
       } catch {
-        if (valid) set({ url, feed: { status: 'unavailable', items: EMPTY, updatedAt: null, note: 'Le serveur local ne répond pas.' } });
+        const note = isPages ? 'Le flux public n’a pas pu être chargé.' : 'Le serveur local ne répond pas.';
+        if (valid) set({ load, feed: { status: 'unavailable', items: EMPTY, updatedAt: null, note } });
       } finally {
         if (valid) timer = setTimeout(refresh, interval);
       }
     };
     void refresh();
     return () => { valid = false; clearTimeout(timer); controller?.abort(); };
-  }, [enabled, interval, url]);
-  return !enabled ? pending : current?.url === url ? current.feed : pending;
+  }, [enabled, interval, load]);
+  return enabled && current && current.load === load ? current.feed : pending;
 }
 
 export function useAtlasData(state: Atlas) {
-  const has = (id: LayerId) => state.active.includes(id) && (state.body === 'moon' ? id === 'moon-landings' : id !== 'moon-landings');
+  const has = (id: LayerId) => !getLayer(id).restriction && state.active.includes(id) && (state.body === 'moon' ? id === 'moon-landings' : id !== 'moon-landings');
   const [countries, countryError] = useStatic('countries'), [cities, cityError] = useStatic('cities');
   const [volcanoes, volcanoError] = useStatic('volcanoes', has('volcanoes'));
   const [airports, airportError] = useStatic('airports', has('airports') || has('routes'));
   const [routes, routeError] = useStatic('routes', has('routes'));
   const [landings, landingError] = useStatic('landings', has('moon-landings'));
-  const quakes = useFeed(`/api/earthquakes?period=${state.period}`, has('quakes'), 60_000);
-  const events = useFeed('/api/events', has('events'), 600_000);
-  const air = useFeed(`/api/air-traffic?region=${state.region}`, has('air'), 180_000);
-  const sea = useFeed('/api/sea-traffic', has('sea'), 20_000);
-  const satellites = useFeed('/api/satellites', has('satellites'), 25_000);
+  const quakeLoader = useMemo(() => live.quakes(state.period), [state.period]);
+  const airLoader = useMemo(() => live.air(state.region), [state.region]);
+  const quakes = useFeed(quakeLoader, has('quakes'), 60_000);
+  const events = useFeed(live.events, has('events'), 600_000);
+  const air = useFeed(airLoader, has('air'), 180_000);
+  const sea = useFeed(live.sea, has('sea'), 20_000);
+  const satellites = useFeed(live.satellites, has('satellites'), 25_000);
   const filteredQuakes = useMemo(() => quakes.items.filter(item => (item.number ?? 0) >= state.minMagnitude), [quakes.items, state.minMagnitude]);
   const places = useMemo<Place[]>(() => [
     ...countries.map(area => ({ ...area.center, id: `country-${area.id}`, name: area.name, context: 'Pays', aliases: [area.nativeName], altitude: 0.95 })),
