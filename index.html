@@ -50,7 +50,7 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
 #issCard { position: fixed; bottom: 14px; right: 14px; z-index: 40; width: 282px; padding: 12px; border-radius: 16px; }
 #legend { position: fixed; bottom: 14px; left: 14px; z-index: 40; max-width: 46vw; padding: 12px; border-radius: 16px; }
 #panelToggle { position: fixed; top: 14px; left: 14px; z-index: 41; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; font-size: 17px; border-radius: 12px; }
-.seg { display: flex; gap: 4px; background: rgba(255,255,255,.06); padding: 3px; border-radius: 10px; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; background: rgba(255,255,255,.06); padding: 3px; border-radius: 10px; }
 .seg button { flex: 1; padding: 5px 4px; font-size: 11px; border-radius: 8px; color: #94a3b8; white-space: nowrap; transition: .15s; }
 .seg button:hover { color: #e2e8f0; }
 .seg button.on { background: rgba(94,160,255,.24); color: #dbeafe; }
@@ -138,7 +138,9 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
     <div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1">Mode visuel</div>
     <div id="modeSeg" class="seg">
       <button data-mode="satellite" class="on">🛰 Satellite</button>
+      <button data-mode="day">☀️ Jour HD</button>
       <button data-mode="night">🌃 Nuit</button>
+      <button data-mode="dark">🌑 Sombre</button>
       <button data-mode="topo">⛰ Relief</button>
     </div>
   </div>
@@ -200,6 +202,7 @@ body { font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif; }
 
 <script src="https://cdn.jsdelivr.net/npm/topojson-client"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3"></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@4.1.1/dist/satellite.min.js"></script>
 <script type="module">
   try {
     window.THREE = await import('https://cdn.jsdelivr.net/npm/three@0.187.0/+esm');

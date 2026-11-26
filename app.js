@@ -23,6 +23,17 @@ async function fetchJSON(url, ms) {
   } finally { clearTimeout(t); }
 }
 
+async function fetchText(url, ms) {
+  const timeout = ms || 12000;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const r = await fetch(url, { signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.text();
+  } finally { clearTimeout(t); }
+}
+
 function logLoad(msg, ok) {
   const el = $('#loaderLog');
   if (!el) return;
@@ -39,7 +50,7 @@ const IS_MOBILE = (window.matchMedia && window.matchMedia('(pointer: coarse)').m
 const state = {
   mode: 'satellite',
   choro: 'none',
-  layers: { countries: false, cities: false, relief: false, quakes: false, eonet: false, geology: false, currents: false, shipping: false, cables: false, trenches: false, air: false, ships: false, clouds: false, iss: false },
+  layers: { countries: false, cities: false, relief: false, quakes: false, eonet: false, geology: false, currents: false, shipping: false, cables: false, trenches: false, air: false, ships: false, clouds: false, iss: false, leo: false },
   net: {},
   mouse: { x: 0, y: 0 },
   hoverPoly: null,
@@ -53,7 +64,7 @@ const state = {
   scales: {}
 };
 
-const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null, flights: [], vessels: [], flightsLive: false, vesselsLive: false };
+const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null, flights: [], vessels: [], flightsLive: false, vesselsLive: false, sats: [], satPts: [] };
 
 const LAYER_DEFS = [
   { id: 'countries', domain: 'Terre & géopolitique', label: 'Frontières & pays' },
@@ -69,10 +80,11 @@ const LAYER_DEFS = [
   { id: 'air', domain: 'Flux & transports mondiaux', label: 'Avions en direct (ADS-B)' },
   { id: 'ships', domain: 'Flux & transports mondiaux', label: 'Navires en direct (AIS)' },
   { id: 'clouds', domain: 'Atmosphère & espace proche', label: 'Nuageuse & halo atmosphérique' },
-  { id: 'iss', domain: 'Atmosphère & espace proche', label: 'ISS — suivi live' }
+  { id: 'iss', domain: 'Atmosphère & espace proche', label: 'ISS — suivi live' },
+  { id: 'leo', domain: 'Atmosphère & espace proche', label: 'Satellites LEO (TLE SGP4)' }
 ];
 
-const POINT_R = { city: 0.3, quake: 0.4, volcano: 0.3, eonet: 0.4, port: 0.5, strait: 0.45, trench: 0.55, peak: 0.45 };
+const POINT_R = { city: 0.3, quake: 0.4, volcano: 0.3, eonet: 0.4, port: 0.5, strait: 0.45, trench: 0.55, peak: 0.45, sat: 0.16 };
 
 const EONET_COLORS = {
   'Wildfires': '#ff6d00', 'Severe Storms': '#ffd60a', 'Volcanoes': '#ff2d55', 'Sea and Lake Ice': '#90e0ef',
@@ -230,7 +242,7 @@ function setupGlobe() {
     .pointsData([]).pointLat(d => d.lat).pointLng(d => d.lng)
     .pointColor(d => d.color || '#ffffff')
     .pointRadius(d => d.layer === 'city' ? 0.22 + Math.min(0.5, Math.log10(1 + (d.pop || 0)) / 16) : d.layer === 'quake' ? 0.18 + (d.mag || 0) * 0.14 : (POINT_R[d.layer] || 0.3))
-    .pointAltitude(d => d.layer === 'city' ? 0.012 + Math.min(0.035, Math.log10(1 + (d.pop || 0)) / 220) : 0.018)
+    .pointAltitude(d => d.layer === 'sat' ? Math.min(0.07, 0.01 + (d.altKm || 400) / 6371) : d.layer === 'city' ? 0.012 + Math.min(0.035, Math.log10(1 + (d.pop || 0)) / 220) : 0.018)
     .pointsMerge(true)
     .pointLabel(() => '').onPointHover(d => hoverObj(d)).onPointClick(d => { if (d && !Array.isArray(d)) openDetail(d); })
     .labelsData([]).labelLat(d => d.lat).labelLng(d => d.lng).labelText(d => d.name)
@@ -395,6 +407,7 @@ function applyCustomVisibility() {
 
 function tick() {
   requestAnimationFrame(tick);
+  try {
   if (cloudMesh && cloudMesh.parent && !state.staticView) cloudMesh.rotation.y += 0.00045;
   if (Date.now() - lastDyn > 5000) {
     lastDyn = Date.now();
@@ -408,6 +421,27 @@ function tick() {
     const sc = world.getScreenCoords(state.iss.lat, state.iss.lng, alt);
     if (sc && issLabel) { issLabel.style.left = sc.x + 'px'; issLabel.style.top = sc.y + 'px'; }
   }
+  } catch (e) { console.error('tick KO:', e); }
+}
+
+function installWatchdog() {
+  try {
+    const r = world.renderer();
+    const orig = r.render.bind(r);
+    let last = Date.now();
+    r.render = (...a) => { const out = orig(...a); last = Date.now(); return out; };
+    setInterval(() => {
+      if (Date.now() - last > 3000) {
+        try {
+          world.pauseAnimation();
+          world.resumeAnimation();
+          orig(world.scene(), world.camera());
+          last = Date.now();
+          logLoad('Watchdog : boucle de rendu globe.gl relancée (frame figée détectée)', false);
+        } catch (e) { console.error('Watchdog render KO:', e); }
+      }
+    }, 1500);
+  } catch (e) { console.error('installWatchdog KO:', e); }
 }
 
 function rebuild() {
@@ -415,14 +449,14 @@ function rebuild() {
   const on = id => state.layers[id];
   const pts = [], lbl = [], arcs = [], paths = [], rings = [];
 
-  if (on('countries') && DATA.countries) world.polygonsData(DATA.countries.features);
-  else world.polygonsData([]);
+  try { if (on('countries') && DATA.countries) world.polygonsData(DATA.countries.features); else world.polygonsData([]); }
+  catch (e) { console.error('rebuild polygonsData KO:', e); }
 
   if (on('cities')) for (const c of DATA.cityPts) { pts.push(c); if (c.pop >= 2e6) lbl.push(c); }
 
   if (on('relief')) {
-    for (const r of RIVERS) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'river', name: r.name, points: pp, color: '#3a86ff', stroke: 0.9, metric: r.metric }); }
-    for (const m of RANGES) { const pp = cleanPath(m.points); if (pp.length >= 2) paths.push({ layer: 'range', name: m.name, points: pp, color: '#b08968', stroke: 1.6, metric: m.metric }); }
+    for (const r of RIVERS) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'river', name: r.name, points: pp, color: '#4da3ff', metric: r.metric }); }
+    for (const m of RANGES) { const pp = cleanPath(m.points); if (pp.length >= 2) paths.push({ layer: 'range', name: m.name, points: pp, color: '#d9b48f', metric: m.metric }); }
     for (const p of PEAKS) { pts.push(p); lbl.push(p); }
   }
 
@@ -441,7 +475,7 @@ function rebuild() {
 
   if (on('geology')) {
     for (const v of DATA.volcPts) { if (v.elev >= 2000) pts.push(v); if (v.elev >= 3500) lbl.push(v); }
-    for (const f of FAULTS) { const pp = cleanPath(f.points); if (pp.length >= 2) paths.push({ layer: 'fault', name: f.name, points: pp, color: '#ff2d55', stroke: 1.8, metric: f.metric }); }
+    for (const f of FAULTS) { const pp = cleanPath(f.points); if (pp.length >= 2) paths.push({ layer: 'fault', name: f.name, points: pp, color: '#ff2d55', metric: f.metric }); }
   }
 
   if (on('currents')) for (const c of CURRENTS) arcs.push({
@@ -450,7 +484,7 @@ function rebuild() {
   });
 
   if (on('shipping')) {
-    for (const r of ROUTES) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'route', name: r.name, points: pp, color: '#ffd166', stroke: 1.2, metric: r.metric }); }
+    for (const r of ROUTES) { const pp = cleanPath(r.points); if (pp.length >= 2) paths.push({ layer: 'route', name: r.name, points: pp, color: '#ffd166', metric: r.metric }); }
     for (const p of PORTS) { pts.push({ layer: 'port', lat: p.lat, lng: p.lng, name: p.name, metric: p.metric, color: '#ffd166' }); lbl.push(Object.assign({ layer: 'port' }, p)); }
     for (const s of STRAITS) { pts.push({ layer: 'strait', lat: s.lat, lng: s.lng, name: s.name, metric: s.metric, color: '#4cc9f0' }); lbl.push(Object.assign({ layer: 'strait' }, s)); }
   }
@@ -474,19 +508,24 @@ function rebuild() {
     for (const s of DATA.vessels) { pts.push(s); lbl.push(s); }
   }
 
+  if (on('leo')) {
+    const sats = DATA.satPts || [];
+    for (const s of sats) pts.push(s);
+    for (const s of sats.slice(0, 60)) lbl.push(s);
+  }
+
   if (state.flash && Date.now() < state.flash.until) rings.push({ lat: state.flash.lat, lng: state.flash.lng, color: '#ffffff', maxR: 2.6, period: 1900 });
   if (state.probe) rings.push({ lat: state.probe.lat, lng: state.probe.lng, color: '#ffd166', maxR: 1.7, period: 1500 });
 
   lastPts = pts; lastLbl = lbl;
-  world.pointsData(pts);
-  world.labelsData(lbl);
-  world.arcsData(arcs);
-  world.pathsData(paths);
-  world.ringsData(rings);
-  applyCustomVisibility();
-  updateCounters();
-  updateLegend();
-  buildSearch();
+  const setters = [['pointsData', pts], ['labelsData', lbl], ['arcsData', arcs], ['pathsData', paths], ['ringsData', rings]];
+  for (const [m, v] of setters) {
+    try { world[m](v); } catch (e) { console.error('rebuild ' + m + ' KO:', e); logLoad('Couche ' + m + ' en erreur — ignorée (' + ((e && e.message) || e) + ')', false); }
+  }
+  try { applyCustomVisibility(); } catch (e) { console.error(e); }
+  try { updateCounters(); } catch (e) { console.error(e); }
+  try { updateLegend(); } catch (e) { console.error(e); }
+  try { buildSearch(); } catch (e) { console.error(e); }
 }
 
 function layerCounts() {
@@ -504,7 +543,8 @@ function layerCounts() {
     air: DATA.flights.length,
     ships: DATA.vessels.length,
     clouds: '—',
-    iss: '1'
+    iss: '1',
+    leo: (DATA.satPts || []).length
   };
 }
 
@@ -525,6 +565,7 @@ function updateLegend() {
   if (state.layers.trenches) items.push('<span class="chip"><i style="background:#80ffdb"></i>Fosse abyssale</span>');
   if (state.layers.air) items.push('<span class="chip"><i style="background:#ffd166"></i>Avion (couleur = altitude)</span>');
   if (state.layers.ships) { items.push('<span class="chip"><i style="background:#ffd166"></i>Porte-conteneurs</span>'); items.push('<span class="chip"><i style="background:#ff6b6b"></i>Pétrolier</span>'); items.push('<span class="chip"><i style="background:#4cc9f0"></i>Cargo</span>'); items.push('<span class="chip"><i style="background:#8d99ae"></i>Vraquier</span>'); }
+  if (state.layers.leo) items.push('<span class="chip"><i style="background:#e0f2fe"></i>Satellite LEO (SGP4)</span>');
   if (state.layers.countries && state.choro !== 'none') items.push('<span class="chip">Choroplèthe : ' + (state.choro === 'pop' ? 'population (échelle log)' : 'PIB en Mds € (échelle log)') + '</span>');
   if (!items.length) { el.classList.add('hidden'); return; }
   el.innerHTML = '<div class="text-[10px] uppercase tracking-[.14em] text-slate-500 mb-1.5">Légende</div><div class="flex flex-wrap gap-1.5">' + items.join('') + '</div>';
@@ -559,6 +600,7 @@ function describe(d) {
     case 'plane': { const al = d.airline || (airlineOf(d.name) || {}).name; return { t: d.name, c: '✈ Avion' + (al ? ' · ' + al : ''), m: d.metric || '' }; }
     case 'air': return { t: d.name, c: 'Route aérienne', m: d.metric || 'Ligne long-courrier' };
     case 'ship': return { t: d.name, c: 'Navire · ' + (d.type || 'type inconnu'), m: d.metric || '' };
+    case 'sat': return { t: d.name, c: '🛰 Satellite LEO', m: d.metric || '' };
     default: return { t: d.name || d.layer, c: d.layer, m: d.metric || '' };
   }
 }
@@ -663,6 +705,14 @@ function detailBody(d) {
     }
     case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
     case 'ship': return row('Nom / MMSI', esc(d.name)) + row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', DATA.vesselsLive ? 'AIS live (Open Waters)' : 'simulation embarquée (secours étiqueté)');
+    case 'sat': {
+      let h = row('Nom', esc(d.name));
+      if (d.altKm != null) h += row('Altitude', fmt(d.altKm) + ' km');
+      if (d.velKmS != null) h += row('Vitesse orbitale', fmt(d.velKmS * 3600) + ' km/h (' + fmt(d.velKmS) + ' km/s)');
+      h += row('Position', fmt2(d.lat) + '°, ' + fmt2(d.lng) + '°');
+      h += row('Source', state.net.leo === 'live' ? 'TLE space-track (globe.gl dataset) — propagation SGP4 en direct' : 'TLE de secours embarqués — SGP4');
+      return h;
+    }
     default: return '';
   }
 }
@@ -875,6 +925,59 @@ async function loadShips() {
   updateNet();
 }
 
+async function loadLeo() {
+  try {
+    if (!window.satellite) throw new Error('satellite.js non chargé');
+    const txt = await fetchText(API.leoTle, 25000);
+    const lines = txt.split('\n').map(l => l.replace(/\s+$/, '')).filter(Boolean);
+    const sats = [];
+    for (let i = 0; i + 2 < lines.length; i += 3) {
+      const name = lines[i], l1 = lines[i + 1], l2 = lines[i + 2];
+      if (!l1 || !l2 || l1[0] !== '1' || l2[0] !== '2') continue;
+      try { sats.push({ name: name.replace(/^0\s+/, ''), satrec: window.satellite.twoline2satrec(l1, l2) }); } catch (e) {}
+      if (sats.length >= 240) break;
+    }
+    if (!sats.length) throw new Error('TLE vide');
+    DATA.sats = sats;
+    state.net.leo = 'live';
+    logLoad('TLE LEO (space-track via globe.gl) — ' + sats.length + ' satellites, propagation SGP4', true);
+  } catch (e) {
+    DATA.sats = (FALLBACK_TLE || []).map(t => {
+      try { return { name: t[0], satrec: window.satellite.twoline2satrec(t[1], t[2]) }; } catch (err) { return null; }
+    }).filter(Boolean);
+    state.net.leo = 'cache';
+    logLoad('TLE indisponible — ' + DATA.sats.length + ' satellites de secours embarqués (mode cache)', false);
+  }
+  updateLeo();
+  if (state.layers.leo) rebuild();
+  updateNet();
+}
+
+function updateLeo() {
+  const sat = window.satellite;
+  if (!sat || !DATA.sats || !DATA.sats.length) return;
+  const now = new Date();
+  const gmst = sat.gstime(now);
+  const out = [];
+  for (const s of DATA.sats) {
+    let pv;
+    try { pv = sat.propagate(s.satrec, now); } catch (e) { continue; }
+    if (!pv || !pv.position) continue;
+    const gd = sat.eciToGeodetic(pv.position, gmst);
+    const lat = sat.degreesLat(gd.latitude), lng = sat.degreesLong(gd.longitude);
+    if (!isFinite(lat) || !isFinite(lng)) continue;
+    const vel = pv.velocity ? Math.sqrt(pv.velocity.x * pv.velocity.x + pv.velocity.y * pv.velocity.y + pv.velocity.z * pv.velocity.z) : 0;
+    out.push({
+      layer: 'sat', lat, lng, name: s.name, altKm: gd.height, velKmS: vel,
+      metric: 'alt ' + fmt(gd.height) + ' km · ' + fmt(vel * 3600) + ' km/h'
+    });
+  }
+  DATA.satPts = out;
+  if (state.layers.leo && world && lastPts.length) {
+    try { world.pointsData(lastPts); world.labelsData(lastLbl); } catch (e) { console.error(e); }
+  }
+}
+
 function setStaticView(v) {
   state.staticView = v;
   const b = $('#btnStatic');
@@ -1074,7 +1177,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / OpenSky)', ais: 'AIS navires (Open Waters)' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / OpenSky)', ais: 'AIS navires (Open Waters)', leo: 'TLE satellites LEO (space-track)' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');
@@ -1148,17 +1251,23 @@ function setMode(m) {
   if (!world) return;
   const mat = world.globeMaterial();
   if (m === 'satellite') world.globeImageUrl(IMG.satellite);
+  else if (m === 'day') world.globeImageUrl(IMG.day);
   else if (m === 'night') world.globeImageUrl(IMG.night);
+  else if (m === 'dark') world.globeImageUrl(IMG.dark);
   else world.globeImageUrl(IMG.topology);
   if (!THREE) return;
-  if (m === 'satellite') {
-    mat.bumpMap = bumpTex || null; if (bumpTex) mat.bumpScale = 0.05;
+  if (m === 'satellite' || m === 'day') {
+    mat.bumpMap = bumpTex || null; if (bumpTex) mat.bumpScale = m === 'day' ? 0.09 : 0.05;
     mat.emissiveMap = null; mat.emissive = new THREE.Color(0x000000); mat.emissiveIntensity = 1;
     mat.specularMap = waterTex || null; mat.specular = new THREE.Color(0x8fa3b8); mat.shininess = 16;
   } else if (m === 'night') {
     mat.bumpMap = null;
     mat.emissiveMap = nightTex || null; mat.emissive = new THREE.Color(0xffffff); mat.emissiveIntensity = 1.25;
     mat.specular = new THREE.Color(0x000000);
+  } else if (m === 'dark') {
+    mat.bumpMap = null;
+    mat.emissiveMap = null; mat.emissive = new THREE.Color(0x000000); mat.emissiveIntensity = 1;
+    mat.specularMap = null; mat.specular = new THREE.Color(0x000000); mat.shininess = 0;
   } else {
     mat.bumpMap = bumpTex || null; if (bumpTex) mat.bumpScale = 0.1;
     mat.emissiveMap = null; mat.emissive = new THREE.Color(0x000000);
@@ -1276,7 +1385,8 @@ async function init() {
   await loadStatic();
   seedSyntheticFlights();
   seedSyntheticShips();
-  await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank(), loadFlights(), loadShips()]);
+  installWatchdog();
+  await Promise.all([loadQuakes(), loadEonet(), loadIss(), loadWorldBank(), loadFlights(), loadShips(), loadLeo()]);
   buildScales();
   rebuild();
   updateNet();
@@ -1284,6 +1394,8 @@ async function init() {
   setInterval(() => { loadQuakes(); loadEonet(); }, 60000);
   setInterval(loadFlights, 45000);
   setInterval(loadShips, 60000);
+  setInterval(updateLeo, 5000);
+  setInterval(loadLeo, 600000);
   logLoad('Toutes les couches sont prêtes — globe interactif', true);
   bootDone = true;
   maybeHideLoader();

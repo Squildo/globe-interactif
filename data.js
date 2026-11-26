@@ -1,5 +1,7 @@
 const IMG = {
   satellite: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg',
+  day: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-day.jpg',
+  dark: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg',
   night: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg',
   topology: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png',
   water: 'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-water.png',
@@ -28,6 +30,7 @@ const API = {
     'https://api.adsb.lol/v2/point/24/55/800'
   ],
   ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,101,4,104&bbox=29,31,31,33&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,52,2&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55.5,27,57.5&bbox=10,110,14,113&bbox=53,2,56,6&bbox=32,-80,36,-74',
+  leoTle: 'https://unpkg.com/globe.gl/example/datasets/space-track-leo.txt',
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
   eonetAlt: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50',
@@ -422,6 +425,16 @@ const AIRLINES = {
   VNH: ['Vietnam Airlines', 'Vietnam'], HVN: ['VietJet Air', 'Vietnam'], THA: ['Thai Airways', 'Thaïlande'],
   MAS: ['Malaysia Airlines', 'Malaisie'], GIA: ['Garuda Indonesia', 'Indonésie'], PAL: ['Philippine Airlines', 'Philippines']
 };
+
+const FALLBACK_TLE = [
+  ['ISS (ZARYA)', '1 25544U 98067A   26001.00000000  .00016717  00000-0  10270-3 0  9990', '2 25544  51.6400 210.0000 0007000  90.0000 270.0000 15.50000000    10'],
+  ['HST (Hubble)', '1 20580U 90037B   26001.00000000  .00000500  00000-0  30000-4 0  9990', '2 20580  28.4700 280.0000 0030000  60.0000 300.0000 15.09000000    10'],
+  ['STARLINK-1007', '1 44713U 19074A   26001.00000000 -.00001000  00000-0  20000-4 0  9990', '2 44713  53.0500 100.0000 0006000  50.0000 310.0000 15.06000000    10'],
+  ['STARLINK-2000', '1 45854U 20023A   26001.00000000  .00000500  00000-0  10000-4 0  9990', '2 45854  53.0000 200.0000 0005000  45.0000 315.0000 15.05500000    10'],
+  ['NOAA-19', '1 33591U 09005A   26001.00000000 -.00000100  00000-0  10000-4 0  9990', '2 33591  99.1800 150.0000 0014000 180.0000 180.0000 14.12000000    10'],
+  ['SENTINEL-2A', '1 40697U 15028A   26001.00000000 -.00000050  00000-0  10000-4 0  9990', '2 40697  98.5700 120.0000 0012000 200.0000 160.0000 14.30000000    10'],
+  ['GPS BIIR-11', '1 28361U 04045A   26001.00000000 -.00000020  00000-0  10000-4 0  9990', '2 28361  55.0000  60.0000 0010000  30.0000 330.0000  2.00560000    10']
+];
 
 const AC_TYPES = {
   'A318': 'Airbus A318', 'A319': 'Airbus A319', 'A320': 'Airbus A320', 'A321': 'Airbus A321',
