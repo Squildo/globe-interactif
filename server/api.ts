@@ -3,7 +3,7 @@ import { regions, type Region } from '../src/atlas.ts';
 import { object } from '../src/parsers.ts';
 import { assistant } from './assistant.ts';
 import { airTraffic, seaTraffic } from './transport.ts';
-import { isPeriod, science } from './science.ts';
+import { isPeriod, science } from '../src/science.ts';
 
 const loopbackHost = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/i;
 const loopbackPeer = /^(?:127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/;

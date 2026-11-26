@@ -1,6 +1,6 @@
 import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satrec } from 'satellite.js';
-import { isPosition, type Feed, type Mark } from '../src/models.ts';
-import { number, object, orbitalRecords, parseEvents, parseQuakes } from '../src/parsers.ts';
+import { isPosition, type Feed, type Mark } from './models.ts';
+import { number, object, orbitalRecords, parseEvents, parseQuakes } from './parsers.ts';
 import { cached, download, empty } from './upstream.ts';
 
 const minute = 60_000, hour = 60 * minute, day = 24 * hour;
@@ -27,7 +27,7 @@ export function science(request: typeof fetch, now: () => number) {
   }, { ttl: 10 * minute, retry: 5 * minute, retain: day, now });
 
   const catalogues = ['stations', 'visual'].map(group => cached(async () => {
-    const source = await download(request, `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=3le`, undefined, 300_000);
+    const source = await download(request, `https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=TLE`, undefined, 300_000);
     const items = orbitalRecords(source);
     if (!items.length) throw Error('Sélection TLE vide');
     return { status: 'fresh', updatedAt: now(), items };

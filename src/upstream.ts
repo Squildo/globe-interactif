@@ -1,4 +1,4 @@
-import type { Feed } from '../src/models.ts';
+import type { Feed } from './models.ts';
 
 export const empty = <T = never>(status: Feed['status'], note?: string): Feed<T> => ({ status, items: [], updatedAt: null, note });
 export class UpstreamError extends Error {
@@ -19,8 +19,8 @@ export async function download(request: typeof fetch, url: string, options?: Req
     const seconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
     throw new UpstreamError(response.status, Number.isFinite(seconds) ? Math.min(86_400_000, Math.max(0, seconds)) : null);
   }
-  const parts: Uint8Array[] = [];
-  let size = 0;
+  const decoder = new TextDecoder();
+  let size = 0, content = '';
   const stream = response.body?.getReader();
   try {
     if (stream) for (;;) {
@@ -28,10 +28,10 @@ export async function download(request: typeof fetch, url: string, options?: Req
       if (done) break;
       size += value.byteLength;
       if (size > max) { await stream.cancel(); throw Error('Réponse trop volumineuse'); }
-      parts.push(value);
+      content += decoder.decode(value, { stream: true });
     }
   } finally { stream?.releaseLock(); }
-  return Buffer.concat(parts, size).toString('utf8');
+  return content + decoder.decode();
 }
 
 export function cached<T>(load: () => Promise<Feed<T>>, { ttl, retain, retry, now }: { ttl: number; retain: number; retry: number; now: () => number }) {

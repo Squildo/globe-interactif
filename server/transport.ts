@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { regions, type Region } from '../src/atlas.ts';
 import { isPosition, type Feed, type Mark } from '../src/models.ts';
 import { number, object, text } from '../src/parsers.ts';
-import { cached, download, empty, UpstreamError } from './upstream.ts';
+import { cached, download, empty, UpstreamError } from '../src/upstream.ts';
 
 const airBin = 0.5, seaBin = 0.25;
 const cell = (lat: number, lng: number, step: number) => `${Math.floor(lat / step)}:${Math.floor(lng / step)}`;

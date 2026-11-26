@@ -1,6 +1,6 @@
 import { layerIds, validateActions } from '../src/atlas.ts';
 import { list, object } from '../src/parsers.ts';
-import { download, UpstreamError } from './upstream.ts';
+import { download, UpstreamError } from '../src/upstream.ts';
 
 const instruction = `Tu interprètes des commandes cartographiques de TerraScope. Réponds exclusivement en JSON :
 {"message":"phrase courte en français","actions":[]}. Pour une demande non cartographique ou ambiguë, renvoie actions vide.

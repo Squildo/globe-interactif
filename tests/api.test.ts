@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createApi } from '../server/api.ts';
-import { cached } from '../server/upstream.ts';
+import { cached } from '../src/upstream.ts';
 
 const clock = Date.UTC(2026, 10, 26, 15);
 const mocked = (callback: (url: URL, init?: RequestInit) => Response | Promise<Response>): typeof fetch => (input, init) =>
