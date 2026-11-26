@@ -28,29 +28,45 @@ AIS_URL = ('https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m'
 KEEP = ('hex', 'flight', 'r', 't', 'lat', 'lon', 'alt_baro', 'gs', 'track', 'seen_pos', 'category')
 
 
+def collect_ac(j, seen, ac):
+    for a in (j.get('ac') or []):
+        h = str(a.get('hex') or '').lower()
+        if not h or h in seen:
+            continue
+        if a.get('lat') is None or a.get('lon') is None or a.get('alt_baro') == 'ground':
+            continue
+        seen.add(h)
+        ac.append({k: a.get(k) for k in KEEP if a.get(k) is not None})
+        if len(ac) >= 800:
+            return
+
+
 def fetch_planes():
     seen = set()
     ac = []
+    src_used = 'adsb.lol'
     for lat, lon in PLANE_CENTERS:
         try:
             j = get('https://api.adsb.lol/v2/lat/{}/lon/{}/dist/250'.format(lat, lon))
-            for a in (j.get('ac') or []):
-                h = str(a.get('hex') or '').lower()
-                if not h or h in seen:
-                    continue
-                if a.get('lat') is None or a.get('lon') is None or a.get('alt_baro') == 'ground':
-                    continue
-                seen.add(h)
-                ac.append({k: a.get(k) for k in KEEP if a.get(k) is not None})
-                if len(ac) >= 800:
-                    break
+            collect_ac(j, seen, ac)
             time.sleep(0.2)
         except Exception as e:
-            print('plane query failed', lat, lon, repr(e))
+            print('adsb.lol query failed', lat, lon, repr(e))
         if len(ac) >= 800:
             break
+    if len(ac) < 30:
+        src_used = 'avioadsb.org'
+        for lat, lon in PLANE_CENTERS[:8]:
+            try:
+                j = get('https://avioadsb.org/v1/point/{}/{}/100'.format(lat, lon))
+                collect_ac(j, seen, ac)
+                time.sleep(11)
+            except Exception as e:
+                print('avioadsb query failed', lat, lon, repr(e))
+            if len(ac) >= 800:
+                break
     if len(ac) >= 5:
-        payload = {'ts': int(time.time()), 'src': 'adsb.lol', 'count': len(ac), 'ac': ac}
+        payload = {'ts': int(time.time()), 'src': src_used, 'count': len(ac), 'ac': ac}
         with open('live/planes.json', 'w') as f:
             json.dump(payload, f, separators=(',', ':'))
         print('planes.json written:', len(ac))
