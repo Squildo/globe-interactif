@@ -2,6 +2,12 @@
 
 Atlas interactif en français sur un globe 3D Terre/Lune. Recherche un lieu, superpose les couches, change leur représentation et clique sur un pays ou un repère pour consulter sa fiche et sa source. Le globe et l’assistant de commandes ne nécessitent ni compte ni clé.
 
+TerraScope reprend les exemples du dépôt [vasturiano/globe.gl](https://github.com/vasturiano/globe.gl) de Vasco Asturiano et utilise Globe.gl via `react-globe.gl`, avec [Three.js](https://threejs.org/) comme moteur de rendu 3D.
+
+Le projet a été réalisé avec l’aide de l’IA **GPT 6.2 sol**.
+
+![Aperçu de TerraScope : globe 3D avec les frontières, les capitales et le panneau des couches](docs/images/terrascope-apercu.jpg)
+
 ## Édition web
 
 Ouvre [l’atlas sur GitHub Pages](https://squildo.github.io/terrascope/) dans un navigateur compatible WebGL 2. Le site comprend les frontières et capitales, les fonds Satellite et Nuit, la Lune, les nuages illustratifs et l’assistant sans IA, qui demande confirmation avant toute modification.
