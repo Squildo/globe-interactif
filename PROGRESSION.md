@@ -18,9 +18,10 @@ Lire d’abord [CONTEXTE.md](CONTEXTE.md). Voir [le registre des sources](docs/s
 
 ## Vérifications du 26 novembre 2026
 
-- `npm test` : 21 tests passés. `npm run build` et `npm run build:pages` passent. Vite signale la taille du module 3D et l’analyse du worker WASM de `satellite.js` ; ce worker n’est pas inclus dans le build Pages.
+- `npm test` : 22 tests, dont un catalogue USGS mensuel à la taille mesurée (6,8 Mo décompressés). `npm run build` et `npm run build:pages` passent. Vite signale la taille du module 3D et l’analyse du worker WASM de `satellite.js` ; ce worker n’est pas inclus dans le build Pages.
 - `npm run test:browser` : réussi sur le serveur de développement et le build prévisualisé, avec Chromium et WebGL 2 (SwiftShader). Le parcours couvre le survol et sa disparition à la sortie, les nuages (chargement, rendu, dérive sans rotation de la caméra, arrêt au masquage et en mouvement réduit, visibilité d’onglet simulée), les orbites, l’assistant avec confirmation, la recherche, Terre/Lune et les contrôles tactiles. Captures jour/nuit sur ordinateur et iPhone 13 émulé dans `artifacts/`, ignoré par Git. Les séismes, satellites et réponses Gemini y sont simulés.
 - `/api/satellites` réel : HTTP `200`, état `fresh`, cinq positions dont l’ISS. Une couche active sans repère visible peut simplement indiquer que les satellites sont derrière la Terre. L’API distingue ce cas d’un flux indisponible.
+- `npm run test:pages` : artefact vérifié dans Chromium sur ordinateur et mobile avec les flux simulés, depuis une copie du dépôt sans `.env` ni jeu importé. Le scénario couvre aussi l’assistant avec confirmation et les fonds Nuit et Lune.
 - Le `502` et l’erreur de fermeture du canal de messagerie n’ont pas été reproduits dans le Chromium de test sans extensions. Si le `502` revient, relever séparément l’URL de la requête en échec dans Réseau et la source du message de console ; aucun lien avec les satellites n’est établi.
 - `npm audit` : aucune vulnérabilité signalée. Le workflow de publication ne lance pas le script d’import local.
 

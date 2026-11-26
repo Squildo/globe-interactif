@@ -6,6 +6,18 @@ import { download } from '../src/upstream.ts';
 const clock = Date.UTC(2026, 10, 26, 15);
 const iss = 'ISS (ZARYA)\n1 25544U 98067A   26330.17013273  .00004569  00000-0  89217-4 0  9992\n2 25544  51.6313 218.4750 0007471  66.5508 293.6265 15.49589862596861';
 
+test('USGS accepte un catalogue mensuel de la taille observée en production', async () => {
+  const feeds = science(async input => {
+    assert.equal(new URL(String(input)).pathname, '/earthquakes/feed/v1.0/summary/all_month.geojson');
+    return Response.json({ type: 'FeatureCollection', metadata: { generated: clock }, features: [
+      { id: 'U', geometry: { type: 'Point', coordinates: [140, 36, 35] }, properties: { mag: 5.5, détailIgnoré: ' '.repeat(6_800_000) } },
+    ] });
+  }, () => clock);
+  const result = await feeds.quakes[30]();
+  assert.equal(result.status, 'fresh');
+  assert.equal(result.items[0].id, 'U');
+});
+
 test('les catalogues TLE sont mis en cache, et un catalogue partiel reste signalé', async () => {
   const groups: string[] = [];
   let time = clock;

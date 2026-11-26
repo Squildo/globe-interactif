@@ -9,9 +9,10 @@ export type Period = keyof typeof quakeWindows;
 export const isPeriod = (value: string): value is Period => Object.hasOwn(quakeWindows, value);
 
 export function science(request: typeof fetch, now: () => number) {
-  const json = async (url: string): Promise<unknown> => JSON.parse(await download(request, url));
+  const json = async (url: string, max?: number): Promise<unknown> => JSON.parse(await download(request, url, undefined, max));
   const quakes = Object.fromEntries(Object.entries(quakeWindows).map(([period, window]) => [period, cached(async (): Promise<Feed> => {
-    const source = object(await json(`https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_${window}.geojson`));
+    // Le catalogue mensuel complet a atteint 6,8 Mo une fois décompressé.
+    const source = object(await json(`https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_${window}.geojson`, window === 'month' ? 16_000_000 : undefined));
     const generated = number(object(source.metadata).generated), time = now();
     if (source.type !== 'FeatureCollection' || !Array.isArray(source.features) || !generated || generated > time + 5 * minute) throw Error('USGS invalide');
     if (time - generated > hour) return empty('unavailable', 'USGS ne fournit pas de catalogue récent.');
