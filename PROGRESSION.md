@@ -25,4 +25,10 @@ Lire d’abord [CONTEXTE.md](CONTEXTE.md). Voir [le registre des sources](docs/s
 - Le `502` et l’erreur de fermeture du canal de messagerie n’ont pas été reproduits dans le Chromium de test sans extensions. Si le `502` revient, relever séparément l’URL de la requête en échec dans Réseau et la source du message de console ; aucun lien avec les satellites n’est établi.
 - `npm audit` : aucune vulnérabilité signalée. Le workflow de publication ne lance pas le script d’import local.
 
+## Publication GitHub Pages
+
+- [Déploiement réussi](https://github.com/Squildo/terrascope/actions/runs/45883938394) depuis `main` (`32aa740`). [L’édition web](https://squildo.github.io/terrascope/) répond en HTTP 200 et charge les fichiers compilés sous `/terrascope/assets/`.
+- `npm run test:pages` avec `ATLAS_URL=https://squildo.github.io/terrascope/` : réussi dans Chromium sur ordinateur et mobile émulé. Le parcours vérifie le globe, les fonds, la confirmation des commandes et les flux réels USGS (7 et 30 jours), NASA EONET et CelesTrak (dont l’ISS), sans appel à l’API locale.
+- Pages utilise GitHub Actions, pas la publication depuis une branche. L’entrée système `pages-build-deployment` reste affichée comme active (sa désactivation manuelle est refusée par GitHub, HTTP 422), mais aucune nouvelle exécution sur `main` n’a été observée depuis la bascule. `live-data` est supprimé de `main` ; `mistral-large-4-work` est inchangée.
+
 Pour reprendre : [README](README.md) pour lancer ou publier le projet, `src/science.ts` pour les flux partagés, `server/` pour l’API locale et `src/atlas.ts` pour les actions de l’assistant. Vérifier `git status` avant toute opération de versionnement ou de publication.
