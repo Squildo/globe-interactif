@@ -23,13 +23,19 @@ const API = {
   },
   opensky: 'https://opensky-network.org/api/states/all',
   adsb: [
-    'https://api.adsb.lol/v2/point/50/8/1000',
-    'https://api.adsb.lol/v2/point/45/-40/1300',
-    'https://api.adsb.lol/v2/point/39/-98/1100',
-    'https://api.adsb.lol/v2/point/30/125/1100',
-    'https://api.adsb.lol/v2/point/24/55/800'
+    'https://api.adsb.lol/v2/lat/50/lon/8/dist/1000',
+    'https://api.adsb.lol/v2/lat/45/lon/-40/dist/1300',
+    'https://api.adsb.lol/v2/lat/39/lon/-98/dist/1100',
+    'https://api.adsb.lol/v2/lat/32/lon/125/dist/1100',
+    'https://api.adsb.lol/v2/lat/24/lon/55/dist/800'
   ],
-  ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,101,4,104&bbox=29,31,31,33&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,52,2&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55.5,27,57.5&bbox=10,110,14,113&bbox=53,2,56,6&bbox=32,-80,36,-74',
+  adsbAlt: [
+    'https://api.airplanes.live/v2/lat/50/lon/8/dist/1000',
+    'https://api.airplanes.live/v2/lat/45/lon/-40/dist/1300',
+    'https://api.airplanes.live/v2/lat/39/lon/-98/dist/1100',
+    'https://api.airplanes.live/v2/lat/32/lon/125/dist/1100'
+  ],
+  ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,100,4,104&bbox=29,31,31.5,34&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,53,3&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55,27.5,58&bbox=32,-80,36,-74&bbox=10,110,14,114&bbox=30,120,32,123',
   leoTle: 'https://unpkg.com/globe.gl/example/datasets/space-track-leo.txt',
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
@@ -371,7 +377,16 @@ const AIR_ROUTES = [
   { name: 'Paris CDG ↔ Singapour SIN', a: [49.01,2.55], b: [1.36,103.99] }
 ];
 
-const SHIP_COLORS = { 'Porte-conteneurs': '#ffd166', 'Pétrolier': '#ff6b6b', 'Vraquier': '#8d99ae', 'Cargo': '#4cc9f0' };
+const SHIP_COLORS = { 'Porte-conteneurs': '#ffd166', 'Pétrolier': '#ff6b6b', 'Vraquier': '#8d99ae', 'Cargo': '#4cc9f0', 'Passager': '#90e0ef', 'Pêche': '#caffbf', 'Plaisance': '#e0aaff', 'Remorqueur': '#ffb4a2' };
+
+const SHIP_TYPE_NAMES = {
+  30: 'Pêche', 31: 'Pêche', 32: 'Pêche', 33: 'Pêche', 34: 'Pêche', 35: 'Pêche', 36: 'Plaisance', 37: 'Plaisance', 38: 'Plaisance', 39: 'Plaisance',
+  40: 'Passager', 41: 'Passager', 42: 'Passager', 43: 'Passager', 44: 'Passager', 49: 'Passager',
+  50: 'Service', 51: 'Service', 52: 'Remorqueur', 53: 'Service', 54: 'Service', 55: 'Service',
+  60: 'Passager', 61: 'Passager', 62: 'Passager', 63: 'Passager', 64: 'Passager', 65: 'Passager', 66: 'Passager', 67: 'Passager', 68: 'Passager', 69: 'Passager',
+  70: 'Porte-conteneurs', 71: 'Pétrolier', 72: 'Pétrolier', 73: 'Pétrolier', 74: 'Cargo', 75: 'Cargo', 76: 'Cargo', 77: 'Cargo', 78: 'Cargo', 79: 'Pétrolier',
+  80: 'Pétrolier', 81: 'Pétrolier', 82: 'Pétrolier', 83: 'Pétrolier', 84: 'Pétrolier', 85: 'Pétrolier', 86: 'Pétrolier', 87: 'Pétrolier', 88: 'Pétrolier', 89: 'Pétrolier'
+};
 
 const SHIPS = [
   { name: 'Porte-conteneurs — Singapour', lat: 1.3, lng: 103.9, type: 'Porte-conteneurs', metric: '≈ 200 000 EVP' },

@@ -700,7 +700,7 @@ function detailBody(d) {
       if (d.vel != null) h += row('Vitesse sol', fmt(d.vel) + ' km/h (' + fmt(d.vel / 1.852) + ' nœuds)');
       if (d.hdg != null) h += row('Cap', fmt(d.hdg) + '° (' + compass(d.hdg) + ')');
       if (d.metric) h += row('Télémesure', esc(d.metric));
-      h += row('Source', DATA.flightsLive ? 'ADS-B live (adsb.lol / OpenSky Network)' : 'simulation embarquée (secours étiqueté)');
+      h += row('Source', DATA.flightsLive ? 'ADS-B live (adsb.lol / airplanes.live / OpenSky)' : 'simulation embarquée (secours étiqueté)');
       return h;
     }
     case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
@@ -810,7 +810,8 @@ function advanceSynthetic() {
 
 function planeFromAdsb(a, seen) {
   const lat = a.lat, lon = a.lon;
-  if (lat == null || lon == null || !isFinite(+lat) || !isFinite(+lon)) return null;
+  if (lat == null || lon == null || !isFinite(+lat) || !isFinite(+lon) || +lat < -90 || +lat > 90 || +lon < -180 || +lon > 180) return null;
+  if (a.alt_baro === 'ground') return null;
   const hex = String(a.hex || a.icao || '').toUpperCase();
   if (hex) { if (seen.has(hex)) return null; seen.add(hex); }
   const cs = String(a.flight || '').trim();
@@ -851,24 +852,26 @@ function planesFromOpenSky(j) {
 
 async function loadFlights() {
   let out = null, src = null;
-  try {
-    const res = await Promise.allSettled((API.adsb || []).map(u => fetchJSON(u, 12000)));
-    const seen = new Set();
-    out = [];
-    for (const r of res) {
-      if (r.status !== 'fulfilled') continue;
-      const j = r.value;
-      const acs = (j && (j.ac || j.aircraft)) || (Array.isArray(j) ? j : []);
-      for (const a of acs) {
-        const p = planeFromAdsb(a, seen);
-        if (p) out.push(p);
-        if (out.length >= 400) break;
+  for (const [label, urls] of [['adsb.lol (ADS-B)', API.adsb], ['airplanes.live (ADS-B)', API.adsbAlt]]) {
+    if (out) break;
+    try {
+      const res = await Promise.allSettled((urls || []).map(u => fetchJSON(u, 12000)));
+      const seen = new Set();
+      const acc = [];
+      for (const r of res) {
+        if (r.status !== 'fulfilled') continue;
+        const j = r.value;
+        const acs = (j && (j.ac || j.aircraft)) || (Array.isArray(j) ? j : []);
+        for (const a of acs) {
+          const p = planeFromAdsb(a, seen);
+          if (p) acc.push(p);
+          if (acc.length >= 400) break;
+        }
+        if (acc.length >= 400) break;
       }
-      if (out.length >= 400) break;
-    }
-    if (out.length) src = 'adsb.lol (ADS-B)';
-    else out = null;
-  } catch (e) { out = null; }
+      if (acc.length) { out = acc; src = label; }
+    } catch (e) { out = null; }
+  }
   if (!out) {
     try {
       const j = await fetchJSON(API.opensky, 12000);
@@ -896,14 +899,18 @@ async function loadShips() {
     const j = await fetchJSON(API.ais, 15000);
     const out = [];
     const feats = (j && j.features) || (Array.isArray(j && j.vessels) ? j.vessels.map(v => ({ geometry: { coordinates: [v.lon, v.lat] }, properties: v })) : []);
+    const seenMmsi = new Set();
     for (const f of feats) {
       const c = f.geometry && f.geometry.coordinates;
       const pr = f.properties || {};
       if (!c || c.length < 2 || !isFinite(+c[1]) || !isFinite(+c[0])) continue;
-      const type = pr.shiptype || pr.type || pr.vesseltype || null;
+      const lat = +c[1], lng = +c[0];
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+      if (pr.mmsi != null) { if (seenMmsi.has(pr.mmsi)) continue; seenMmsi.add(pr.mmsi); }
+      const type = (pr.shiptype != null && SHIP_TYPE_NAMES[+pr.shiptype]) || pr.type || pr.vesseltype || null;
       const sog = pr.sog != null ? +pr.sog * 1.852 : null;
       out.push({
-        layer: 'ship', lat: +c[1], lng: +c[0],
+        layer: 'ship', lat, lng,
         name: pr.name || ('MMSI ' + (pr.mmsi || '—')), type: type,
         metric: 'vitesse ' + (sog != null ? sog.toFixed(1) : '—') + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
         color: (type && SHIP_COLORS[type]) || '#4cc9f0'
@@ -1177,7 +1184,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / OpenSky)', ais: 'AIS navires (Open Waters)', leo: 'TLE satellites LEO (space-track)' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / airplanes.live / OpenSky)', ais: 'AIS navires (Open Waters)', leo: 'TLE satellites LEO (space-track)' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');
