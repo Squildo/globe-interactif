@@ -64,7 +64,7 @@ const state = {
   scales: {}
 };
 
-const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null, flights: [], vessels: [], flightsLive: false, vesselsLive: false, sats: [], satPts: [] };
+const DATA = { countries: null, cityPts: [], volcPts: [], quakes: [], eonet: [], rcMap: null, rcName: null, waterMask: null, wb: null, flights: [], vessels: [], flightsLive: false, vesselsLive: false, flightsSrc: null, vesselsSrc: null, sats: [], satPts: [] };
 
 const LAYER_DEFS = [
   { id: 'countries', domain: 'Terre & géopolitique', label: 'Frontières & pays' },
@@ -700,11 +700,11 @@ function detailBody(d) {
       if (d.vel != null) h += row('Vitesse sol', fmt(d.vel) + ' km/h (' + fmt(d.vel / 1.852) + ' nœuds)');
       if (d.hdg != null) h += row('Cap', fmt(d.hdg) + '° (' + compass(d.hdg) + ')');
       if (d.metric) h += row('Télémesure', esc(d.metric));
-      h += row('Source', DATA.flightsLive ? 'ADS-B live (adsb.lol / airplanes.live / OpenSky)' : 'simulation embarquée (secours étiqueté)');
+      h += row('Source', DATA.flightsLive ? esc(DATA.flightsSrc || 'ADS-B live') : 'simulation embarquée (secours étiqueté)');
       return h;
     }
     case 'air': return row('Liaison', esc(d.name)) + row('Type', 'Route aérienne long-courrier (donnée embarquée)');
-    case 'ship': return row('Nom / MMSI', esc(d.name)) + row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', DATA.vesselsLive ? 'AIS live (Open Waters)' : 'simulation embarquée (secours étiqueté)');
+    case 'ship': return row('Nom / MMSI', esc(d.name)) + row('Type de navire', esc(d.type || '—')) + row('Détails', esc(d.metric || '—')) + row('Source', DATA.vesselsLive ? esc(DATA.vesselsSrc || 'AIS live') : 'simulation embarquée (secours étiqueté)');
     case 'sat': {
       let h = row('Nom', esc(d.name));
       if (d.altKm != null) h += row('Altitude', fmt(d.altKm) + ' km');
@@ -852,6 +852,24 @@ function planesFromOpenSky(j) {
 
 async function loadFlights() {
   let out = null, src = null;
+  try {
+    const j = await fetchJSON(API.planesFile, 8000);
+    const acs = (j && j.ac) || [];
+    if (acs.length) {
+      const seen = new Set();
+      const acc = [];
+      for (const a of acs) {
+        const p = planeFromAdsb(a, seen);
+        if (p) acc.push(p);
+        if (acc.length >= 400) break;
+      }
+      if (acc.length) {
+        const ageMin = j.ts ? Math.max(0, Math.round((Date.now() / 1000 - j.ts) / 60)) : null;
+        out = acc;
+        src = 'ADS-B live — miroir GitHub Actions (' + (j.src || 'adsb.lol') + ')' + (ageMin != null ? ', snapshot il y a ' + ageMin + ' min' : '');
+      }
+    }
+  } catch (e) { /* pas de fichier live/ -> API directes ci-dessous */ }
   for (const [label, urls] of [['adsb.lol (ADS-B)', API.adsb], ['airplanes.live (ADS-B)', API.adsbAlt]]) {
     if (out) break;
     try {
@@ -882,10 +900,12 @@ async function loadFlights() {
   if (out && out.length) {
     DATA.flights = out;
     DATA.flightsLive = true;
+    DATA.flightsSrc = src;
     state.net.opensky = 'live';
     logLoad(src + ' — ' + out.length + ' avions en direct', true);
   } else {
     DATA.flightsLive = false;
+    DATA.flightsSrc = null;
     state.net.opensky = 'cache';
     if (!DATA.flights.length) seedSyntheticFlights();
     logLoad('Flux avions indisponible (CORS/rate-limit) — ' + DATA.flights.length + ' avions simulés étiquetés', false);
@@ -894,36 +914,56 @@ async function loadFlights() {
   updateNet();
 }
 
+function parseShips(j) {
+  const out = [];
+  const feats = (j && j.features) || (Array.isArray(j && j.vessels) ? j.vessels.map(v => ({ geometry: { coordinates: [v.lon, v.lat] }, properties: v })) : []);
+  const seenMmsi = new Set();
+  for (const f of feats) {
+    const c = f.geometry && f.geometry.coordinates;
+    const pr = f.properties || {};
+    if (!c || c.length < 2 || !isFinite(+c[1]) || !isFinite(+c[0])) continue;
+    const lat = +c[1], lng = +c[0];
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+    if (pr.mmsi != null) { if (seenMmsi.has(pr.mmsi)) continue; seenMmsi.add(pr.mmsi); }
+    const type = (pr.shiptype != null && SHIP_TYPE_NAMES[+pr.shiptype]) || pr.type || pr.vesseltype || null;
+    const sog = pr.sog != null ? +pr.sog * 1.852 : null;
+    out.push({
+      layer: 'ship', lat, lng,
+      name: pr.name || ('MMSI ' + (pr.mmsi || '—')), type: type,
+      metric: 'vitesse ' + (sog != null ? sog.toFixed(1) : '—') + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
+      color: (type && SHIP_COLORS[type]) || '#4cc9f0'
+    });
+    if (out.length >= 300) break;
+  }
+  return out;
+}
+
 async function loadShips() {
+  let out = null, src = null;
   try {
     const j = await fetchJSON(API.ais, 15000);
-    const out = [];
-    const feats = (j && j.features) || (Array.isArray(j && j.vessels) ? j.vessels.map(v => ({ geometry: { coordinates: [v.lon, v.lat] }, properties: v })) : []);
-    const seenMmsi = new Set();
-    for (const f of feats) {
-      const c = f.geometry && f.geometry.coordinates;
-      const pr = f.properties || {};
-      if (!c || c.length < 2 || !isFinite(+c[1]) || !isFinite(+c[0])) continue;
-      const lat = +c[1], lng = +c[0];
-      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
-      if (pr.mmsi != null) { if (seenMmsi.has(pr.mmsi)) continue; seenMmsi.add(pr.mmsi); }
-      const type = (pr.shiptype != null && SHIP_TYPE_NAMES[+pr.shiptype]) || pr.type || pr.vesseltype || null;
-      const sog = pr.sog != null ? +pr.sog * 1.852 : null;
-      out.push({
-        layer: 'ship', lat, lng,
-        name: pr.name || ('MMSI ' + (pr.mmsi || '—')), type: type,
-        metric: 'vitesse ' + (sog != null ? sog.toFixed(1) : '—') + ' km/h · cap ' + (pr.cog != null ? fmt(pr.cog) + '°' : '—'),
-        color: (type && SHIP_COLORS[type]) || '#4cc9f0'
-      });
-      if (out.length >= 300) break;
-    }
-    if (!out.length) throw new Error('flux vide');
+    out = parseShips(j);
+    if (out.length) src = 'AIS live (Open Waters)';
+  } catch (e) { out = null; }
+  if (!out || !out.length) {
+    try {
+      const j = await fetchJSON(API.shipsFile, 8000);
+      out = parseShips(j);
+      if (out.length) {
+        const ageMin = j.ts ? Math.max(0, Math.round((Date.now() / 1000 - j.ts) / 60)) : null;
+        src = 'AIS — miroir GitHub Actions (' + (j.src || 'openwaters') + ')' + (ageMin != null ? ', snapshot il y a ' + ageMin + ' min' : '');
+      }
+    } catch (e) { out = null; }
+  }
+  if (out && out.length) {
     DATA.vessels = out;
     DATA.vesselsLive = true;
+    DATA.vesselsSrc = src;
     state.net.ais = 'live';
-    logLoad('AIS Open Waters — ' + out.length + ' navires en direct', true);
-  } catch (e) {
+    logLoad(src + ' — ' + out.length + ' navires', true);
+  } else {
     DATA.vesselsLive = false;
+    DATA.vesselsSrc = null;
     state.net.ais = 'cache';
     if (!DATA.vessels.length) seedSyntheticShips();
     logLoad('AIS indisponible — ' + DATA.vessels.length + ' navires simulés étiquetés sur les routes maritimes', false);
@@ -1184,7 +1224,7 @@ function updateIssCard() {
     '<div class="text-slate-400">Trace au sol</div><div class="text-right text-slate-100 font-mono">' + fmt2(Math.abs(s.lat)) + '° ' + (s.lat >= 0 ? 'N' : 'S') + ', ' + fmt2(Math.abs(s.lng)) + '° ' + (s.lng >= 0 ? 'E' : 'O') + '</div></div>';
 }
 
-const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (adsb.lol / airplanes.live / OpenSky)', ais: 'AIS navires (Open Waters)', leo: 'TLE satellites LEO (space-track)' };
+const NET_LABELS = { countries: 'Natural Earth frontières', cities: 'Natural Earth villes', volcanoes: 'Volcans', restcountries: 'Données pays (mledoze/REST Countries)', worldbank: 'Banque mondiale', usgs: 'USGS séismes', eonet: 'NASA EONET', iss: 'ISS (wheretheiss.at)', openmeteo: 'Open-Meteo', opensky: 'Avions ADS-B (miroir Actions / adsb.lol / OpenSky)', ais: 'AIS navires (Open Waters / miroir Actions)', leo: 'TLE satellites LEO (space-track)' };
 function updateNet() {
   const keys = Object.keys(NET_LABELS).filter(k => state.net[k]);
   const b = $('#netBadge');

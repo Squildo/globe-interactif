@@ -37,6 +37,8 @@ const API = {
   ],
   ais: 'https://ais.openwaters.io/v1/vessels?kind=vessel&max_age=30m&bbox=1,100,4,104&bbox=29,31,31.5,34&bbox=35,-7,37,-3&bbox=8,-80,10,-78&bbox=50,0,53,3&bbox=40.8,28.5,41.3,29.5&bbox=25.5,55,27.5,58&bbox=32,-80,36,-74&bbox=10,110,14,114&bbox=30,120,32,123',
   leoTle: 'https://unpkg.com/globe.gl/example/datasets/space-track-leo.txt',
+  planesFile: 'live/planes.json',
+  shipsFile: 'live/ships.json',
   usgs: 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
   eonet: 'https://eonet.gsfc.nasa.gov/api/v3/events/geojson?status=open&limit=50',
   eonetAlt: 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50',
